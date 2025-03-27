@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>BuildConnect - 施工報告</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <!-- FullCalendar CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.css" />
+  <!-- Panzoom ライブラリ -->
+  <script src="https://unpkg.com/@panzoom/panzoom@9.4.0/dist/panzoom.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow-x: hidden;
+    }
+    body {
+      background-color: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+    }
+    /* ヘッダー */
+    #header {
+      background-color: #343a40;
+      color: #fff;
+      padding: 10px 20px;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #header .notification-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.5rem;
+      cursor: pointer;
+      position: relative;
+      margin-right: 10px;
+    }
+    #header .notification-btn .badge {
+      position: absolute;
+      top: -5px;
+      right: -10px;
+      background-color: red;
+      color: white;
+      border-radius: 50%;
+      padding: 2px 6px;
+      font-size: 0.7rem;
+      display: none;
+    }
+    /* サイドバーとメイン */
+    #container {
+      display: flex;
+      flex: 1;
+      height: calc(100% - 60px);
+    }
+    #sidebar {
+      width: 240px;
+      background-color: #495057;
+      padding: 20px 10px;
+      overflow-y: auto;
+    }
+    #sidebar .nav-link {
+      color: #fff;
+      margin-bottom: 1rem;
+      display: block;
+      padding: 5px 10px;
+      border-radius: 0.25rem;
+      text-decoration: none;
+    }
+    #sidebar .nav-link:hover,
+    #sidebar .nav-link.active {
+      background-color: #6c757d;
+    }
+    #main-content {
+      margin-left: 240px;
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    table th, table td {
+      vertical-align: middle;
+    }
+    .report-thumbnail { 
+      width: 80px; 
+      height: 80px; 
+      object-fit: cover; 
+      cursor: pointer; 
+      border: 1px solid #ccc; 
+      transition: transform 0.2s;
+    }
+    .report-thumbnail:hover { 
+      transform: scale(1.05);
+    }
+    .modal-fullscreen {
+      max-width: 100%;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    .modal-fullscreen .modal-content {
+      height: 100%;
+      border: none;
+      border-radius: 0;
+    }
+    .modal-fullscreen .modal-body {
+      padding: 0;
+      position: relative;
+      background-color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .img-modal-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+    }
+    #previewImage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(1);
+      transition: transform 0.3s ease;
+      user-select: none;
+      max-width: none;
+    }
+    .highlight {
+      background-color: #f8d7da !important;
+    }
+    #addReportForm .form-label {
+      font-weight: bold;
+    }
+    #addReportForm .form-control.is-invalid {
+      border-color: #dc3545;
+    }
+    #addReportForm .invalid-feedback {
+      display: block;
+      color: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3 class="mb-0">BuildConnect 会員サイト</h3>
+    <div>
+      <!-- ユーザーの企業情報を表示 -->
+      <span id="userInfo">企業名 (企業コード)</span>
+      <!-- 通知ベル -->
+      <button id="notificationBtn" class="notification-btn">
+        <i class="fas fa-bell"></i>
+        <span class="badge" id="notificationCount">0</span>
+      </button>
+      <!-- ログアウトボタン -->
+      <button id="logoutBtn" class="btn btn-outline-light btn-sm">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+
+  <!-- 通知モーダル -->
+  <div class="modal fade" id="notificationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">未承認の施工報告</h5>
+          <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <ul id="notificationList" class="list-group">
+            <!-- 通知項目をここに挿入 -->
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="container">
+    <!-- サイドバー -->
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link" href="project_management.html">プロジェクト管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="order_management.html">発注管理</a></li>
+        <li class="nav-item"><a class="nav-link active" href="reports.html">施工報告</a></li>
+        <li class="nav-item"><a class="nav-link" href="schedule_management.html">スケジュール管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="inventory_management.html">資材在庫管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="registration.html">登録管理</a></li>
+      </ul>
+    </nav>
+
+    <!-- メインコンテンツ -->
+    <div id="main-content" class="w-100">
+      <h2>施工報告</h2>
+      <div class="row mb-3">
+        <div class="col-md-4">
+          <input type="text" id="reportSearchInput" class="form-control" placeholder="報告内容またはプロジェクト名で検索">
+        </div>
+        <div class="col-md-4">
+          <select id="reportStatusFilter" class="form-select">
+            <option value="">状態（すべて）</option>
+            <option value="pending">承認待ち</option>
+            <option value="approved">承認済</option>
+            <option value="rejected">却下</option>
+          </select>
+        </div>
+        <div class="col-md-4 text-end">
+          <!-- ボタンは削除済み -->
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-striped" id="reportTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>プロジェクト名</th>
+              <th>報告内容</th>
+              <th>報告者</th>
+              <th>報告日時</th>
+              <th>写真</th>
+              <th>状態</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 施工報告データをここに挿入 -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全画面プレビュー用モーダル -->
+  <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-body p-0">
+          <button type="button" class="btn btn-close position-absolute top-0 start-0 m-3" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div class="img-modal-container" id="imgModalContainer">
+            <img id="previewImage" src="" alt="Preview">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 施工報告追加モーダル -->
+  <div class="modal fade" id="addReportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <form id="addReportForm" class="modal-content" enctype="multipart/form-data">
+        <div class="modal-header">
+          <h5 class="modal-title">施工報告追加</h5>
+          <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="reportProjectSelect" class="form-label">プロジェクト名</label>
+            <select class="form-select" id="reportProjectSelect" name="project_id" required>
+              <option value="">プロジェクトを選択してください</option>
+              <!-- 候補は JavaScript で追加 -->
+            </select>
+            <div class="invalid-feedback">プロジェクトを選択してください。</div>
+          </div>
+          <div class="mb-3">
+            <label for="reportText" class="form-label">報告内容</label>
+            <textarea class="form-control" id="reportText" name="report_text" rows="4" required></textarea>
+            <div class="invalid-feedback">報告内容を入力してください。</div>
+          </div>
+          <div class="mb-3">
+            <label for="reportPhoto" class="form-label">写真（任意）</label>
+            <input type="file" class="form-control" id="reportPhoto" name="photo" accept="image/*">
+            <div class="invalid-feedback">有効な画像ファイルを選択してください。</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">報告追加</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JavaScript ライブラリ -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.js"></script>
+  <script>
+    // Ajax リクエスト時に localStorage の authToken を自動付与
+    $.ajaxSetup({
+      beforeSend: function(xhr) {
+        const token = localStorage.getItem("authToken");
+        if (token) {
+          xhr.setRequestHeader("Authorization", "Bearer " + token);
+        }
+      }
+    });
+
+    async function loadCompanyInfo() {
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        $("#userInfo").text("未ログイン");
+        return;
+      }
+
+      try {
+        const resp = await fetch("/companies", {
+          headers: { "Authorization": "Bearer " + token }
+        });
+        if (!resp.ok) throw new Error("会社情報取得失敗");
+        const companies = await resp.json();
+
+        // JWT ペイロードから company_code を取得
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        const company = companies.find(c => c.company_code === payload.company_code);
+
+        if (company) {
+          $("#userInfo").text(`${company.company_name} (${company.company_code})`);
+        } else {
+          $("#userInfo").text("企業情報が見つかりません");
+        }
+      } catch (e) {
+        console.error("loadCompanyInfo error:", e);
+        $("#userInfo").text("未ログイン");
+      }
+    }
+
+    loadCompanyInfo();
+
+    let notificationCount = 0;
+    let allReports = []; // 全報告データを保持
+
+    function updateNotificationBadge() {
+      if (notificationCount > 0) {
+        $("#notificationCount").text(notificationCount);
+        $("#notificationCount").show();
+      } else {
+        $("#notificationCount").hide();
+      }
+      console.log("Notification count updated:", notificationCount);
+    }
+
+    // 日本時間（JST）に変換するヘルパー関数
+    function formatJSTDateTime(dateString) {
+      const date = new Date(dateString);
+      const jstOffset = 9 * 60 * 60 * 1000; // JSTはUTC+9
+      const jstDate = new Date(date.getTime() + jstOffset);
+      return jstDate.toLocaleString("ja-JP", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+        timeZone: "Asia/Tokyo"
+      });
+    }
+
+    // 施工報告一覧を全件取得して表示
+    function loadReports() {
+      console.log("Loading reports...");
+      $.get("/reports", function(data) {
+        console.log("Reports data received:", data);
+        allReports = data; // 全データを保持
+        filterAndRenderReports(); // フィルタリングと表示
+      }).fail(function(jqXHR, textStatus, errorThrown) {
+        console.error("Error loading reports:", errorThrown);
+        const tbody = $("#reportTable tbody");
+        tbody.empty();
+        tbody.append("<tr><td colspan='8' class='text-center'>施工報告の取得に失敗しました</td></tr>");
+      });
+    }
+
+    // フィルタリングと表示処理
+    function filterAndRenderReports() {
+      const searchText = $("#reportSearchInput").val().toLowerCase().trim();
+      const statusFilter = $("#reportStatusFilter").val();
+
+      console.log("Filtering reports with:", { searchText, statusFilter });
+
+      let filteredReports = [...allReports];
+
+      // 検索テキストによるフィルタリング
+      if (searchText) {
+        filteredReports = filteredReports.filter(r => {
+          const projectName = (r.project_name || "").toLowerCase();
+          const reportText = (r.report_text || "").toLowerCase();
+          return projectName.includes(searchText) || reportText.includes(searchText);
+        });
+      }
+
+      // 状態フィルターによるフィルタリング
+      if (statusFilter) {
+        filteredReports = filteredReports.filter(r => r.status === statusFilter);
+      }
+
+      console.log("Filtered reports:", filteredReports);
+
+      // テーブルに表示
+      const tbody = $("#reportTable tbody");
+      tbody.empty();
+      if (filteredReports.length === 0) {
+        tbody.append("<tr><td colspan='8' class='text-center'>該当する施工報告はありません</td></tr>");
+      } else {
+        filteredReports.forEach(function(r) {
+          const row = createReportRow(r);
+          tbody.append(row);
+        });
+      }
+    }
+
+    // 報告データからテーブル行の HTML を生成
+    function createReportRow(r) {
+      const urgent = (r.status === "pending" && /遅延|故障|異常/.test(r.report_text));
+      const rowClass = urgent ? 'class="highlight"' : "";
+      return `
+        <tr ${rowClass}>
+          <td>${r.id}</td>
+          <td>${r.project_name || "-"}</td>
+          <td>${r.report_text || "-"}</td>
+          <td>${r.reporter || "-"}</td>
+          <td>${formatJSTDateTime(r.created_at)}</td>
+          <td>${r.photo_url ? `<img src="${r.photo_url}" class="report-thumbnail" onclick="openImagePreview('${r.photo_url}')">` : "-"}</td>
+          <td>${convertStatusToJapanese(r.status)}</td>
+          <td>
+            ${r.status === "pending" ? `<button class="btn btn-sm btn-success" onclick="updateReportStatus(${r.id}, 'approved')">承認</button>
+            <button class="btn btn-sm btn-danger" onclick="updateReportStatus(${r.id}, 'rejected')">却下</button>` : "-"}
+          </td>
+        </tr>
+      `;
+    }
+
+    // 最新報告を取得してテーブル先頭に追加（自動更新）
+    function getLatestReport() {
+      console.log("Fetching latest report...");
+      $.get("/reports", function(data) {
+        if (data.length > 0) {
+          // バックエンドが降順で返す場合、data[0] が最新
+          let latest = data[0];
+          // 重複防止のため、既に先頭に表示されていないかチェック
+          let firstRowId = $("#reportTable tbody tr:first-child td:first-child").text();
+          if (String(latest.id) !== firstRowId) {
+            prependReport(latest);
+            console.log("Prepended latest report:", latest);
+          } else {
+            console.log("Latest report already displayed.");
+          }
+        } else {
+          console.log("No reports found.");
+        }
+      }).fail(function(jqXHR, textStatus, errorThrown) {
+        console.error("Error fetching latest report:", errorThrown);
+      });
+    }
+
+    // 取得した最新報告をテーブルの先頭に追加
+    function prependReport(r) {
+      allReports.unshift(r); // 全データに追加
+      filterAndRenderReports(); // フィルタリングと再描画
+    }
+
+    // 報告の状態を更新する（承認／却下）
+    function updateReportStatus(reportId, newStatus) {
+      if (!confirm(`報告ID:${reportId} を「${newStatus === 'approved' ? '承認' : '却下'}」しますか？`)) return;
+      $.ajax({
+        url: "/reports/" + reportId,
+        type: "PUT",
+        contentType: "application/json",
+        data: JSON.stringify({ status: newStatus }),
+        success: function() {
+          alert("状態を更新しました");
+          console.log("Report status updated for reportId:", reportId);
+          loadReports();
+        },
+        error: function() {
+          alert("状態更新に失敗しました");
+        }
+      });
+    }
+
+    // 状態を日本語に変換する
+    function convertStatusToJapanese(status) {
+      if (status === "pending") return "承認待ち";
+      if (status === "approved") return "承認済";
+      if (status === "rejected") return "却下";
+      return status;
+    }
+
+    // 通知一覧を取得してモーダルに表示
+    function loadNotifications() {
+      console.log("Loading notifications...");
+      $.get("/notifications", function(data) {
+        console.log("Notifications data:", data);
+        const list = $("#notificationList");
+        list.empty();
+        if (data.length === 0) {
+          list.append("<li class='list-group-item'>新しい未承認報告はありません</li>");
+        } else {
+          data.forEach(function(n) {
+            const liClass = /遅延|故障|異常/.test(n.report_text) ? "list-group-item highlight" : "list-group-item";
+            const item = `
+              <li class="${liClass}">
+                <strong>プロジェクト:</strong> ${n.project_name || "-"}<br>
+                <strong>報告者:</strong> ${n.reporter || "-"}<br>
+                <strong>内容:</strong> ${n.report_text || "-"}<br>
+                <strong>日時:</strong> ${formatJSTDateTime(n.created_at)}<br>
+                ${n.photo_url ? "<strong>画像あり</strong>" : ""}
+                <div class="mt-2">
+                  <button class="btn btn-sm btn-success" onclick="updateNotificationStatus(${n.id}, 'approved')">承認</button>
+                  <button class="btn btn-sm btn-danger" onclick="updateNotificationStatus(${n.id}, 'rejected')">却下</button>
+                </div>
+              </li>
+            `;
+            list.append(item);
+          });
+        }
+      });
+    }
+
+    // 通知内の報告状態を更新する
+    function updateNotificationStatus(reportId, newStatus) {
+      if (!confirm(`報告ID:${reportId} を「${newStatus === 'approved' ? '承認' : '却下'}」しますか？`)) return;
+      $.ajax({
+        url: "/reports/" + reportId,
+        type: "PUT",
+        contentType: "application/json",
+        data: JSON.stringify({ status: newStatus }),
+        success: function() {
+          alert("状態を更新しました");
+          console.log("Notification report updated for reportId:", reportId);
+          loadNotifications();
+          loadReports();
+        },
+        error: function() {
+          alert("状態更新に失敗しました");
+        }
+      });
+    }
+
+    // 画像プレビュー用モーダルを開く
+    function openImagePreview(imageUrl) {
+      $("#previewImage").attr("src", imageUrl);
+      console.log("Opening image preview for:", imageUrl);
+      const modal = new bootstrap.Modal(document.getElementById("previewModal"));
+      modal.show();
+    }
+
+    // ドキュメント読み込み時の初期処理
+    $(document).ready(function() {
+      console.log("Document ready, loading reports...");
+      loadReports();
+      updateNotificationBadge();
+
+      $("#reportSearchInput").on("input", filterAndRenderReports);
+      $("#reportStatusFilter").on("change", filterAndRenderReports);
+
+      // WebSocket 接続の開始と自動更新
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(protocol + "//" + window.location.host + "/ws/reports");
+      ws.onopen = function() {
+        console.log("WebSocket connected");
+      };
+      ws.onerror = function(error) {
+        console.error("WebSocket error:", error);
+      };
+      ws.onmessage = function(event) {
+        console.log("WebSocket message received:", event.data);
+        if (event.data === "NEW_REPORT") {
+          console.log("NEW_REPORT event received; automatically updating reports...");
+          getLatestReport();
+          notificationCount++;
+          updateNotificationBadge();
+        }
+      };
+
+      // 通知ベル押下時
+      $("#notificationBtn").click(function() {
+        console.log("Notification button clicked");
+        loadNotifications();
+        notificationCount = 0;
+        updateNotificationBadge();
+        const modal = new bootstrap.Modal(document.getElementById("notificationModal"));
+        modal.show();
+      });
+
+      // ログアウト処理
+      $("#logoutBtn").click(function() {
+        console.log("Logout button clicked");
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("userInfo");
+        window.location.href = "admin_login.html";
+      });
+    });
+  </script>
+</body>
+</html>

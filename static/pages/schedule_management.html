@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>BuildConnect - スケジュール管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Bootstrap & FontAwesome -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <!-- FullCalendar CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.css" rel="stylesheet" />
+  <!-- dhtmlxGantt CSS -->
+  <link rel="stylesheet" href="https://cdn.dhtmlx.com/gantt/edge/dhtmlxgantt.css" />
+  <style>
+    body { background-color: #f8f9fa; }
+    #header { background-color: #343a40; color: #fff; padding: 10px 20px; }
+    #sidebar { 
+      width: 240px; 
+      background-color: #495057; 
+      min-height: 100vh; 
+      padding-top: 20px;
+    }
+    #sidebar .nav-link {
+      color: #fff;
+      margin-bottom: 1rem;
+      display: block;
+      padding: 5px 10px;
+      border-radius: 0.25rem;
+      text-decoration: none;
+    }
+    #sidebar .nav-link:hover,
+    #sidebar .nav-link.active {
+      background-color: #6c757d;
+    }
+    #main-content { margin-left: 240px; padding: 20px; }
+    #taskAddBar {
+      background-color: #e9ecef;
+      padding: 10px;
+      border-radius: 0.25rem;
+      margin-bottom: 1rem;
+    }
+    .filter-area { margin-bottom: 15px; }
+    .filter-area .row > div { margin-bottom: 10px; }
+    .tab-content { margin-top: 15px; }
+    #calendarView, #ganttView, #listView { display: none; }
+    #calendarView.active, #ganttView.active, #listView.active { display: block; }
+    #calendarContainer { max-width: 100%; }
+    #ganttContainer { width: 100%; height: 400px; }
+    #taskAssigneeSelect { height: 150px; }
+    #scheduleTable th, #scheduleTable td { vertical-align: middle; }
+    .delayed { background-color: #f8d7da !important; }
+    .pagination { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3 class="mb-0">BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+      <button id="logoutBtn" class="btn btn-outline-light btn-sm">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+  
+  <div class="d-flex">
+    <!-- サイドバー -->
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link" href="project_management.html">プロジェクト管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="order_management.html">発注管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="reports.html">施工報告</a></li>
+        <li class="nav-item"><a class="nav-link active" href="schedule_management.html">スケジュール管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="inventory_management.html">資材在庫管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="registration.html">登録管理</a></li>
+      </ul>
+    </nav>
+    
+    <!-- メインコンテンツ -->
+    <div id="main-content" class="w-100">
+      <!-- 上部タスク追加エリア -->
+      <div id="taskAddBar" class="d-flex justify-content-between align-items-center">
+        <div>
+          <button id="showAddTaskBtn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTaskModal">
+            <i class="fas fa-plus"></i> タスク追加
+          </button>
+        </div>
+      </div>
+      
+      <!-- タブ -->
+      <ul class="nav nav-tabs" id="viewTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="calendar-tab" data-bs-toggle="tab" data-bs-target="#calendarView" type="button" role="tab">カレンダー</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="gantt-tab" data-bs-toggle="tab" data-bs-target="#ganttView" type="button" role="tab">ガントチャート</button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="list-tab" data-bs-toggle="tab" data-bs-target="#listView" type="button" role="tab">一覧</button>
+        </li>
+      </ul>
+      
+      <div class="tab-content mt-3">
+        <!-- カレンダータブ -->
+        <div class="tab-pane fade show active" id="calendarView" role="tabpanel">
+          <div class="filter-area">
+            <div class="row">
+              <div class="col-md-3">
+                <select id="filterProjectCalendar" class="form-select">
+                  <option value="">すべてのプロジェクト</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select id="filterAssigneeCalendar" class="form-select">
+                  <option value="">すべての担当者</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select id="filterStatusCalendar" class="form-select">
+                  <option value="">すべての状態</option>
+                  <option value="not_started">未着手</option>
+                  <option value="in_progress">進行中</option>
+                  <option value="done">完了</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <input type="text" id="filterTaskCalendar" class="form-control" placeholder="タスク名検索" />
+              </div>
+            </div>
+            <button id="applyFiltersCalendar" class="btn btn-secondary mt-2">検索</button>
+          </div>
+          <div id="todayDelayedInfoCalendar" class="mb-3"></div>
+          <div id="calendarContainer"></div>
+        </div>
+        <!-- ガントチャートタブ -->
+        <div class="tab-pane fade" id="ganttView" role="tabpanel">
+          <div class="filter-area">
+            <div class="row">
+              <div class="col-md-3">
+                <select id="filterProjectGantt" class="form-select">
+                  <option value="">すべてのプロジェクト</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select id="filterAssigneeGantt" class="form-select">
+                  <option value="">すべての担当者</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select id="filterStatusGantt" class="form-select">
+                  <option value="">すべての状態</option>
+                  <option value="not_started">未着手</option>
+                  <option value="in_progress">進行中</option>
+                  <option value="done">完了</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <input type="text" id="filterTaskGantt" class="form-control" placeholder="タスク名検索" />
+              </div>
+            </div>
+            <button id="applyFiltersGantt" class="btn btn-secondary mt-2">検索</button>
+          </div>
+          <div id="todayDelayedInfoGantt" class="mb-3"></div>
+          <div id="ganttContainer"></div>
+        </div>
+        <!-- 一覧タブ -->
+        <div class="tab-pane fade" id="listView" role="tabpanel">
+          <div class="filter-area">
+            <div class="row">
+              <div class="col-md-3">
+                <select id="filterProjectList" class="form-select">
+                  <option value="">すべてのプロジェクト</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select id="filterAssigneeList" class="form-select">
+                  <option value="">すべての担当者</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <select id="filterStatusList" class="form-select">
+                  <option value="">すべての状態</option>
+                  <option value="not_started">未着手</option>
+                  <option value="in_progress">進行中</option>
+                  <option value="done">完了</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <input type="text" id="filterTaskList" class="form-control" placeholder="タスク名検索" />
+              </div>
+            </div>
+            <button id="applyFiltersList" class="btn btn-secondary mt-2">検索</button>
+          </div>
+          <div id="todayDelayedInfoList" class="mb-3"></div>
+          <table class="table table-striped" id="scheduleTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>プロジェクト名</th>
+                <th>タスク名</th>
+                <th>担当者</th>
+                <th>開始日時</th>
+                <th>終了日時</th>
+                <th>状態</th>
+                <th>削除</th>
+                <th>編集</th>
+              </tr>
+            </thead>
+            <tbody>
+            </tbody>
+          </table>
+          <nav>
+            <ul class="pagination" id="pagination">
+              <li class="page-item"><span class="page-link">1</span></li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+      
+      <!-- タスク追加モーダル -->
+      <div class="modal fade" id="addTaskModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="addTaskForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">タスク追加</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="taskProjectSelect" class="form-label">プロジェクト名</label>
+                <select id="taskProjectSelect" class="form-select" required>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="taskName" class="form-label">タスク名</label>
+                <input type="text" id="taskName" class="form-control" required />
+              </div>
+              <div class="mb-3">
+                <label for="taskAssigneeSelect" class="form-label">担当者名</label>
+                <select id="taskAssigneeSelect" class="form-select" multiple required>
+                </select>
+                <div class="form-text">複数選択する場合は Ctrl (または Cmd) キーを押しながら選択してください。</div>
+              </div>
+              <div class="mb-3">
+                <label for="taskStartTime" class="form-label">開始日時</label>
+                <input type="datetime-local" id="taskStartTime" class="form-control" required />
+              </div>
+              <div class="mb-3">
+                <label for="taskEndTime" class="form-label">終了日時</label>
+                <input type="datetime-local" id="taskEndTime" class="form-control" required />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">追加</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- タスク編集モーダル -->
+      <div class="modal fade" id="editTaskModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="editTaskForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">タスク編集</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="editProjectName" class="form-label">プロジェクト名</label>
+                <input type="text" id="editProjectName" class="form-control" readonly />
+              </div>
+              <div class="mb-3">
+                <label for="editTaskName" class="form-label">タスク名</label>
+                <input type="text" id="editTaskName" class="form-control" required />
+              </div>
+              <div class="mb-3">
+                <label for="editAssigneeSelect" class="form-label">担当者名</label>
+                <select id="editAssigneeSelect" class="form-select" multiple required>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="editStatus" class="form-label">状態</label>
+                <select id="editStatus" class="form-select" required>
+                  <option value="not_started">未着手</option>
+                  <option value="in_progress">進行中</option>
+                  <option value="done">完了</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="editStartTime" class="form-label">開始日時</label>
+                <input type="datetime-local" id="editStartTime" class="form-control" required />
+              </div>
+              <div class="mb-3">
+                <label for="editEndTime" class="form-label">終了日時</label>
+                <input type="datetime-local" id="editEndTime" class="form-control" required />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- jQuery, Bootstrap JS Bundle, FullCalendar, dhtmlxGantt -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.js"></script>
+  <script src="https://cdn.dhtmlx.com/gantt/edge/dhtmlxgantt.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      const API_BASE = "/";
+      const authToken = localStorage.getItem("authToken") || "";
+      let projects = [];
+      let scheduleItems = [];
+      let employees = [];
+      let currentEditTaskId = null;
+      let currentEditProjectId = null;
+
+      // モーダルを閉じる共通関数（バックドロップとmodal-openクラスを確実に削除）
+      function closeModal(modalId) {
+        const modalElement = document.getElementById(modalId);
+        const modal = bootstrap.Modal.getInstance(modalElement) || new bootstrap.Modal(modalElement);
+        modal.hide();
+
+        // バックドロップとmodal-openクラスを削除
+        setTimeout(() => {
+          document.body.classList.remove('modal-open');
+          const backdrops = document.querySelectorAll('.modal-backdrop');
+          backdrops.forEach(backdrop => backdrop.remove());
+          document.body.style.overflow = 'auto';
+          document.body.style.paddingRight = ''; // Bootstrapが追加するpaddingをリセット
+        }, 300); // Bootstrapのモーダルアニメーション（300ms）後に実行
+      }
+
+      // モーダルが閉じた後にバックドロップをクリーンアップ（念のため）
+      ['addTaskModal', 'editTaskModal'].forEach(modalId => {
+        const modalElement = document.getElementById(modalId);
+        modalElement.addEventListener('hidden.bs.modal', () => {
+          document.body.classList.remove('modal-open');
+          const backdrops = document.querySelectorAll('.modal-backdrop');
+          backdrops.forEach(backdrop => backdrop.remove());
+          document.body.style.overflow = 'auto';
+          document.body.style.paddingRight = '';
+        });
+      });
+
+      // 日付フォーマット関数
+      function formatDateTime(dtString) {
+        if (!dtString) return "";
+        const dt = new Date(dtString);
+        const y = dt.getFullYear();
+        const m = ("0" + (dt.getMonth() + 1)).slice(-2);
+        const d = ("0" + dt.getDate()).slice(-2);
+        const hh = ("0" + dt.getHours()).slice(-2);
+        const mm = ("0" + dt.getMinutes()).slice(-2);
+        return `${y}-${m}-${d} ${hh}:${mm}`;
+      }
+
+      // 日付差分計算
+      function calculateDuration(start, end) {
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const diffTime = Math.abs(endDate - startDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays < 1 ? 1 : diffDays;
+      }
+
+      // ユーザー情報表示とログアウト
+      function parseJwt(token) {
+        try {
+          const parts = token.split(".");
+          if (parts.length !== 3) return null;
+          const base64Url = parts[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const jsonPayload = decodeURIComponent(atob(base64)
+            .split("")
+            .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join(""));
+          return JSON.parse(jsonPayload);
+        } catch (e) {
+          console.error("JWT解析エラー:", e);
+          return null;
+        }
+      }
+
+      function loadCompanyInfo() {
+        const token = localStorage.getItem("authToken");
+        if (!token) return;
+        const payload = parseJwt(token);
+        if (payload) {
+          document.getElementById("userInfo").textContent = `${payload.sub} (${payload.company_code || "No Code"})`;
+        }
+      }
+      loadCompanyInfo();
+
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        localStorage.removeItem("authToken");
+        window.location.href = "admin_login.html";
+      });
+
+      // プロジェクトデータ取得
+      function loadProjects() {
+        fetch(API_BASE + "projects", { headers: { "Authorization": "Bearer " + authToken } })
+          .then(res => {
+            if (!res.ok) throw new Error("プロジェクト一覧の取得に失敗しました");
+            return res.json();
+          })
+          .then(data => {
+            projects = data;
+            renderProjectSelect();
+            renderFilterProjectList();
+            renderFilterProjectCalendar();
+            renderFilterProjectGantt();
+          })
+          .catch(err => {
+            console.error("Failed to fetch projects", err);
+            alert(err.message);
+          });
+      }
+
+      function renderProjectSelect() {
+        const select = document.getElementById("taskProjectSelect");
+        select.innerHTML = "";
+        projects.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderFilterProjectList() {
+        const select = document.getElementById("filterProjectList");
+        select.innerHTML = '<option value="">すべてのプロジェクト</option>';
+        projects.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderFilterProjectCalendar() {
+        const select = document.getElementById("filterProjectCalendar");
+        select.innerHTML = '<option value="">すべてのプロジェクト</option>';
+        projects.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderFilterProjectGantt() {
+        const select = document.getElementById("filterProjectGantt");
+        select.innerHTML = '<option value="">すべてのプロジェクト</option>';
+        projects.forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = p.name;
+          select.appendChild(opt);
+        });
+      }
+
+      // 従業員データ取得
+      function loadEmployees() {
+        fetch(API_BASE + "registration/employees", { headers: { "Authorization": "Bearer " + authToken } })
+          .then(res => {
+            if (!res.ok) throw new Error("従業員情報の取得に失敗しました");
+            return res.json();
+          })
+          .then(data => {
+            employees = data;
+            renderEmployeeSelect();
+            renderFilterAssigneeCalendar();
+            renderFilterAssigneeGantt();
+            renderFilterAssigneeList();
+            renderEditAssigneeSelect();
+          })
+          .catch(err => {
+            console.error("Failed to fetch employees", err);
+            alert(err.message);
+          });
+      }
+
+      function renderEmployeeSelect() {
+        const select = document.getElementById("taskAssigneeSelect");
+        select.innerHTML = "";
+        employees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.name;
+          opt.textContent = emp.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderEditAssigneeSelect() {
+        const select = document.getElementById("editAssigneeSelect");
+        select.innerHTML = "";
+        employees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.name;
+          opt.textContent = emp.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderFilterAssigneeCalendar() {
+        const select = document.getElementById("filterAssigneeCalendar");
+        select.innerHTML = '<option value="">すべての担当者</option>';
+        employees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.name;
+          opt.textContent = emp.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderFilterAssigneeGantt() {
+        const select = document.getElementById("filterAssigneeGantt");
+        select.innerHTML = '<option value="">すべての担当者</option>';
+        employees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.name;
+          opt.textContent = emp.name;
+          select.appendChild(opt);
+        });
+      }
+
+      function renderFilterAssigneeList() {
+        const select = document.getElementById("filterAssigneeList");
+        select.innerHTML = '<option value="">すべての担当者</option>';
+        employees.forEach(emp => {
+          const opt = document.createElement("option");
+          opt.value = emp.name;
+          opt.textContent = emp.name;
+          select.appendChild(opt);
+        });
+      }
+
+      // スケジュールデータ取得
+      function loadSchedule() {
+        console.log("スケジュールデータ取得開始: ", API_BASE + "schedule_all");
+        console.log("使用するトークン: ", authToken);
+        fetch(API_BASE + "schedule_all", { 
+          headers: { 
+            "Authorization": "Bearer " + authToken,
+            "Content-Type": "application/json"
+          } 
+        })
+          .then(res => {
+            console.log("レスポンスステータス: ", res.status);
+            if (!res.ok) {
+              return res.text().then(text => {
+                throw new Error(`スケジュールの取得に失敗しました: ${res.status} ${res.statusText}\n詳細: ${text}`);
+              });
+            }
+            return res.json();
+          })
+          .then(data => {
+            console.log("取得したスケジュールデータ: ", data);
+            if (!Array.isArray(data)) {
+              throw new Error("スケジュールデータが配列形式ではありません: " + JSON.stringify(data));
+            }
+            scheduleItems = data;
+            renderAllViews();
+          })
+          .catch(err => {
+            console.error("スケジュール取得エラー: ", err);
+            alert("スケジュール取得エラー: " + err.message);
+            scheduleItems = [];
+            renderAllViews();
+          });
+      }
+
+      // 各ビュー再描画
+      function renderAllViews() {
+        renderScheduleList();
+        renderCalendar(scheduleItems);
+        renderGantt(scheduleItems);
+        renderTodayAndDelayed();
+      }
+
+      // フィルター適用
+      function applyFilters(items, type) {
+        let filtered = items;
+        let projectFilter = "";
+        let assigneeFilter = "";
+        let statusFilter = "";
+        let taskFilter = "";
+        if (type === "calendar") {
+          projectFilter = document.getElementById("filterProjectCalendar").value;
+          assigneeFilter = document.getElementById("filterAssigneeCalendar").value;
+          statusFilter = document.getElementById("filterStatusCalendar").value;
+          taskFilter = document.getElementById("filterTaskCalendar").value.toLowerCase();
+        } else if (type === "gantt") {
+          projectFilter = document.getElementById("filterProjectGantt").value;
+          assigneeFilter = document.getElementById("filterAssigneeGantt").value;
+          statusFilter = document.getElementById("filterStatusGantt").value;
+          taskFilter = document.getElementById("filterTaskGantt").value.toLowerCase();
+        } else {
+          projectFilter = document.getElementById("filterProjectList").value;
+          assigneeFilter = document.getElementById("filterAssigneeList").value;
+          statusFilter = document.getElementById("filterStatusList").value;
+          taskFilter = document.getElementById("filterTaskList").value.toLowerCase();
+        }
+        if (projectFilter) {
+          filtered = filtered.filter(item => item.project_id == projectFilter);
+        }
+        if (assigneeFilter) {
+          filtered = filtered.filter(item => item.assignee && item.assignee.includes(assigneeFilter));
+        }
+        if (statusFilter) {
+          filtered = filtered.filter(item => item.status === statusFilter);
+        }
+        if (taskFilter) {
+          filtered = filtered.filter(item => item.task && item.task.toLowerCase().includes(taskFilter));
+        }
+        return filtered;
+      }
+
+      // 一覧タブ描画
+      function renderScheduleList() {
+        const filtered = applyFilters(scheduleItems, "list");
+        const page = 1;
+        const pageSize = 10;
+        const start = (page - 1) * pageSize;
+        const paginated = filtered.slice(start, start + pageSize);
+        const tbody = document.querySelector("#scheduleTable tbody");
+        tbody.innerHTML = "";
+
+        if (paginated.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='9' class='text-center'>スケジュールはありません</td></tr>";
+        } else {
+          paginated.forEach(item => {
+            const now = new Date();
+            const endDate = new Date(item.end_time);
+            const isDelayed = (endDate < now && item.status !== "done");
+            const tr = document.createElement("tr");
+            if (isDelayed) tr.classList.add("delayed");
+            tr.innerHTML = `
+              <td>${item.id || "不明"}</td>
+              <td>${getProjectName(item.project_id)}</td>
+              <td>${item.task || "不明"}</td>
+              <td>${item.assignee || "未設定"}</td>
+              <td>${formatDateTime(item.start_time) || "不明"}</td>
+              <td>${formatDateTime(item.end_time) || "不明"}</td>
+              <td>
+                ${isDelayed ? '遅延中' : convertStatus(item.status)}
+                <select class="status-select form-select form-select-sm d-inline-block w-auto" data-id="${item.id}">
+                  <option value="not_started" ${item.status === "not_started" ? "selected" : ""}>未着手</option>
+                  <option value="in_progress" ${item.status === "in_progress" ? "selected" : ""}>進行中</option>
+                  <option value="done" ${item.status === "done" ? "selected" : ""}>完了</option>
+                </select>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-danger delete-btn" data-id="${item.id}">削除</button>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-primary edit-btn" data-id="${item.id}" data-bs-toggle="modal" data-bs-target="#editTaskModal">編集</button>
+              </td>
+            `;
+            tbody.appendChild(tr);
+          });
+
+          document.querySelectorAll(".status-select").forEach(select => {
+            select.addEventListener("change", function() {
+              const taskId = this.getAttribute("data-id");
+              const newStatus = this.value;
+              updateTaskStatus(taskId, newStatus);
+            });
+          });
+
+          document.querySelectorAll(".delete-btn").forEach(btn => {
+            btn.addEventListener("click", function() {
+              const taskId = this.getAttribute("data-id");
+              deleteTask(taskId);
+            });
+          });
+
+          document.querySelectorAll(".edit-btn").forEach(btn => {
+            btn.addEventListener("click", function() {
+              const taskId = this.getAttribute("data-id");
+              showEditTask(taskId);
+            });
+          });
+        }
+      }
+
+      function getProjectName(projectId) {
+        const proj = projects.find(p => p.id == projectId);
+        return proj ? proj.name : "不明";
+      }
+
+      function convertStatus(status) {
+        if (status === "not_started") return "未着手";
+        if (status === "in_progress") return "進行中";
+        if (status === "done") return "完了";
+        return status || "不明";
+      }
+
+      // 状態更新
+      function updateTaskStatus(taskId, newStatus) {
+        const task = scheduleItems.find(item => item.id == taskId);
+        if (!task) return;
+
+        const updateData = {
+          id: parseInt(taskId),
+          project_id: task.project_id,
+          task: task.task,
+          assignee: task.assignee,
+          status: newStatus,
+          start_time: task.start_time,
+          end_time: task.end_time
+        };
+
+        fetch(API_BASE + "schedule/" + taskId, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(updateData)
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("状態更新に失敗しました");
+          return res.json();
+        })
+        .then(() => {
+          alert("状態が更新されました");
+          loadSchedule();
+        })
+        .catch(err => {
+          console.error(err);
+          alert("状態更新エラー：" + err.message);
+        });
+      }
+
+      // カレンダー描画
+      function renderCalendar(items) {
+        const filtered = applyFilters(items, "calendar");
+        const calendarEl = document.getElementById("calendarContainer");
+        const events = filtered.map(item => ({
+          id: item.id || "不明",
+          title: `${item.task || "不明"} (${getProjectName(item.project_id)})`,
+          start: item.start_time || null,
+          end: item.end_time || null
+        }));
+        calendarEl.innerHTML = "";
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+          initialView: "dayGridMonth",
+          headerToolbar: {
+            left: "prev,next today",
+            center: "title",
+            right: "dayGridMonth,timeGridWeek,timeGridDay"
+          },
+          locale: "ja",
+          events: events
+        });
+        calendar.render();
+      }
+
+      // ガントチャート描画
+      function renderGantt(items) {
+        const filtered = applyFilters(items, "gantt");
+        const tasksData = {
+          data: filtered.map(item => {
+            const proj = projects.find(p => p.id == item.project_id);
+            const projectName = proj ? proj.name : "Unknown";
+            return {
+              id: item.id || "不明",
+              text: item.task || "不明",
+              start_date: item.start_time ? item.start_time.split("T")[0] : "2025-01-01",
+              duration: calculateDuration(item.start_time, item.end_time),
+              progress: item.status === "done" ? 1.0 : (item.status === "in_progress" ? 0.5 : 0.0),
+              projectName: projectName
+            };
+          }),
+          links: []
+        };
+        gantt.config.xml_date = "%Y-%m-%d";
+        gantt.config.columns = [
+          { name: "text", label: "タスク名", tree: true, width: 300 },
+          { name: "start_date", label: "開始日", align: "center" },
+          { name: "duration", label: "期間（日）", align: "center" },
+          { name: "projectName", label: "プロジェクト名", align: "center", width: 120 }
+        ];
+        gantt.init("ganttContainer");
+        gantt.clearAll();
+        gantt.parse(tasksData);
+      }
+
+      // 本日タスク＆遅延タスク表示
+      function renderTodayAndDelayed() {
+        const now = new Date();
+        const todayTasks = scheduleItems.filter(item => {
+          const start = new Date(item.start_time);
+          const end = new Date(item.end_time);
+          return start <= now && end >= now && item.status !== "done";
+        });
+        const delayedTasks = scheduleItems.filter(item => {
+          const end = new Date(item.end_time);
+          return end < now && item.status !== "done";
+        });
+        let html = "<h5>本日のタスク：</h5>";
+        if (todayTasks.length === 0) {
+          html += "<p>本日タスクはありません</p>";
+        } else {
+          todayTasks.forEach(item => {
+            html += `<p>[${getProjectName(item.project_id)}] ${item.task || "不明"} (${formatDateTime(item.start_time)}～${formatDateTime(item.end_time)})</p>`;
+          });
+        }
+        html += "<h5 class='mt-3'>遅延中のタスク：</h5>";
+        if (delayedTasks.length === 0) {
+          html += "<p>遅延中のタスクはありません</p>";
+        } else {
+          delayedTasks.forEach(item => {
+            html += `<p class="text-danger">[${getProjectName(item.project_id)}] ${item.task || "不明"} (終了：${formatDateTime(item.end_time)})</p>`;
+          });
+        }
+        ["todayDelayedInfoCalendar", "todayDelayedInfoGantt", "todayDelayedInfoList"].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) { el.innerHTML = html; }
+        });
+      }
+
+      // タスク追加処理
+      function addTask(event) {
+        event.preventDefault();
+        const projectId = parseInt(document.getElementById("taskProjectSelect").value);
+        const taskName = document.getElementById("taskName").value;
+        const assigneeSelect = document.getElementById("taskAssigneeSelect");
+        const selectedOptions = Array.from(assigneeSelect.selectedOptions).map(opt => opt.value);
+        const assignee = selectedOptions.join(", ");
+        const startTime = document.getElementById("taskStartTime").value + ":00+09:00";
+        const endTime = document.getElementById("taskEndTime").value + ":00+09:00";
+        const taskData = {
+          project_id: projectId,
+          task: taskName,
+          assignee: assignee,
+          start_time: startTime,
+          end_time: endTime,
+          status: "not_started"
+        };
+        fetch(API_BASE + "schedule", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(taskData)
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("タスク追加に失敗しました");
+          return res.json();
+        })
+        .then(() => {
+          alert("タスク追加に成功しました。");
+          document.getElementById("addTaskForm").reset();
+          closeModal("addTaskModal");
+          loadSchedule();
+        })
+        .catch(err => {
+          console.error(err);
+          alert("タスク追加エラー：" + err.message);
+        });
+      }
+
+      // タスク編集表示
+      function showEditTask(taskId) {
+        const task = scheduleItems.find(item => item.id == taskId);
+        if (task) {
+          currentEditTaskId = task.id;
+          currentEditProjectId = task.project_id;
+          document.getElementById("editProjectName").value = getProjectName(task.project_id);
+          document.getElementById("editTaskName").value = task.task || "";
+          const select = document.getElementById("editAssigneeSelect");
+          select.innerHTML = "";
+          employees.forEach(emp => {
+            const opt = document.createElement("option");
+            opt.value = emp.name;
+            opt.textContent = emp.name;
+            opt.selected = task.assignee && task.assignee.split(", ").includes(emp.name);
+            select.appendChild(opt);
+          });
+          document.getElementById("editStatus").value = task.status || "not_started";
+          document.getElementById("editStartTime").value = task.start_time ? task.start_time.substring(0, 16) : "";
+          document.getElementById("editEndTime").value = task.end_time ? task.end_time.substring(0, 16) : "";
+          const modal = new bootstrap.Modal(document.getElementById("editTaskModal"));
+          modal.show();
+        } else {
+          alert("タスクが見つかりません。データを再読み込みしてください。");
+          loadSchedule();
+        }
+      }
+
+      // タスク更新処理
+      function updateTask(event) {
+        event.preventDefault();
+        const taskName = document.getElementById("editTaskName").value;
+        const select = document.getElementById("editAssigneeSelect");
+        const assignee = Array.from(select.selectedOptions).map(opt => opt.value).join(", ");
+        const status = document.getElementById("editStatus").value;
+        const startTime = document.getElementById("editStartTime").value + ":00+09:00";
+        const endTime = document.getElementById("editEndTime").value + ":00+09:00";
+        const updateData = {
+          id: parseInt(currentEditTaskId),
+          project_id: currentEditProjectId,
+          task: taskName,
+          assignee: assignee,
+          status: status,
+          start_time: startTime,
+          end_time: endTime
+        };
+
+        fetch(API_BASE + "schedule/" + currentEditTaskId, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(updateData)
+        })
+        .then(res => {
+          if (!res.ok) {
+            return res.text().then(text => {
+              throw new Error(`タスク更新に失敗しました: ${res.status} ${res.statusText}\n詳細: ${text}`);
+            });
+          }
+          return res.json();
+        })
+        .then(() => {
+          alert("タスクが正常に更新されました");
+          closeModal("editTaskModal");
+          loadSchedule();
+        })
+        .catch(err => {
+          console.error(err);
+          alert("タスク更新エラー: " + err.message);
+        });
+      }
+
+      // タスク削除処理
+      function deleteTask(taskId) {
+        if (!confirm("本当に削除してよろしいですか？")) return;
+        fetch(API_BASE + "schedule/" + taskId, {
+          method: "DELETE",
+          headers: { "Authorization": "Bearer " + authToken }
+        })
+          .then(res => {
+            if (!res.ok) throw new Error("タスク削除に失敗しました");
+            return res.json();
+          })
+          .then(() => {
+            alert("タスクが削除されました");
+            loadSchedule();
+          })
+          .catch(err => {
+            console.error(err);
+            alert("タスク削除エラー：" + err.message);
+          });
+      }
+
+      // フィルター変更時の再描画
+      document.getElementById("filterProjectCalendar").addEventListener("change", loadSchedule);
+      document.getElementById("filterAssigneeCalendar").addEventListener("change", loadSchedule);
+      document.getElementById("filterStatusCalendar").addEventListener("change", loadSchedule);
+      document.getElementById("filterTaskCalendar").addEventListener("input", loadSchedule);
+
+      document.getElementById("filterProjectGantt").addEventListener("change", loadSchedule);
+      document.getElementById("filterAssigneeGantt").addEventListener("change", loadSchedule);
+      document.getElementById("filterStatusGantt").addEventListener("change", loadSchedule);
+      document.getElementById("filterTaskGantt").addEventListener("input", loadSchedule);
+
+      document.getElementById("filterProjectList").addEventListener("change", loadSchedule);
+      document.getElementById("filterAssigneeList").addEventListener("change", loadSchedule);
+      document.getElementById("filterStatusList").addEventListener("change", loadSchedule);
+      document.getElementById("filterTaskList").addEventListener("input", loadSchedule);
+
+      // タブ切替時の再描画
+      document.getElementById("viewTabs").addEventListener("shown.bs.tab", loadSchedule);
+
+      // 定期更新（5分毎）
+      setInterval(() => { loadSchedule(); }, 300000);
+
+      // 初期イベント登録
+      document.getElementById("addTaskForm").addEventListener("submit", addTask);
+      document.getElementById("editTaskForm").addEventListener("submit", updateTask);
+
+      // 初期データ取得
+      loadProjects();
+      loadEmployees();
+      loadSchedule();
+    });
+  </script>
+</body>
+</html>

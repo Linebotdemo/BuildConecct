@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>BuildConnect 会員サイト</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <style>
+    body { background-color: #f8f9fa; }
+    #header { background-color: #343a40; color: #fff; padding: 10px 20px; }
+    #sidebar { width: 240px; background-color: #495057; min-height: 100vh; padding-top: 20px; }
+    #sidebar .nav-link {
+      color: #fff; margin: 5px 0; cursor: pointer;
+    }
+    #sidebar .nav-link:hover, #sidebar .nav-link.active {
+      background-color: #6c757d; border-radius: 4px; padding-left: 10px;
+    }
+    #main-content { margin-left: 240px; padding: 20px; }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3 class="mb-0">BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">ユーザー名 (@企業名)</span>
+      <button class="btn btn-outline-light btn-sm" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+
+  <div class="d-flex">
+    <!-- サイドバー -->
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a class="nav-link active" href="#" onclick="loadContent('project_management.html', this, event)">
+            <i class="fas fa-clipboard-list"></i> プロジェクト管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#" onclick="loadContent('order_management.html', this, event)">
+            <i class="fas fa-truck"></i> 発注管理
+          </a>
+        </li>
+        <!-- 他のメニューも同様に -->
+      </ul>
+    </nav>
+
+    <!-- メインコンテンツエリア -->
+    <div id="main-content" class="w-100">
+      <div id="contentArea">
+        <!-- 初期表示の内容 -->
+        <h1>ようこそ！</h1>
+        <p>ここに初期ダッシュボードなどを表示します。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- jQuery (Ajax用) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    // 修正した loadContent 関数（デバッグ付き）
+    function loadContent(pageUrl, el, event) {
+      if (event) {
+        event.preventDefault();
+        console.log("DEBUG: event.preventDefault() 呼び出し済み");
+      }
+      // サイドバーのリンクの active クラスを解除
+      document.querySelectorAll('#sidebar .nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
+      if (el) {
+        el.classList.add('active');
+      }
+      console.log("DEBUG: Ajaxで " + pageUrl + " を読み込もうとしています。");
+
+      $.get("pages/" + pageUrl)
+        .done(function(data) {
+          console.log("DEBUG: " + pageUrl + " の読み込み成功");
+          $("#contentArea").html(data);
+        })
+        .fail(function() {
+          console.error("DEBUG: " + pageUrl + " の読み込み失敗");
+          $("#contentArea").html("<p>コンテンツの読み込みに失敗しました。</p>");
+        });
+    }
+
+    // ページ読み込み時に初期コンテンツを読み込む
+    $(document).ready(function(){
+      loadContent('project_management.html', $('#sidebar .nav-link').first(), null);
+    });
+  </script>
+</body>
+</html>

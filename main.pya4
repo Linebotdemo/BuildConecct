@@ -1,0 +1,1205 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+import sys
+import uuid
+import tempfile
+import datetime
+import asyncio
+import logging
+import json
+from datetime import datetime as dt, date, timezone
+from typing import Optional, List
+
+# FastAPI 関連
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Form, UploadFile, File, BackgroundTasks, WebSocket, WebSocketDisconnect, Request
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
+
+# SQLAlchemy 関連
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, Boolean, Date, DateTime, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship, Session, joinedload
+
+# Pydantic
+from pydantic import BaseModel, validator
+
+# JWT, Passlib
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+# LINE Bot 関連
+from linebot import LineBotApi, WebhookParser
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import (
+    MessageEvent, TextMessage, ImageMessage, AudioMessage, TextSendMessage,
+    QuickReply, QuickReplyButton, MessageAction
+)
+import openai
+import textwrap
+
+# --- カスタムミドルウェア ---
+class CacheControlMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: ASGIApp):
+        super().__init__(app)
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static") or request.url.path.startswith("/files"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+# --- Configuration ---
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "default_admin_api_key")
+JWT_SECRET = os.getenv("JWT_SECRET", "your_super_secret_key_here")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+DEBUG = os.getenv("DEBUG", "True") == "True"
+
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+line_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+parser = WebhookParser(LINE_CHANNEL_SECRET)
+openai.api_key = OPENAI_API_KEY
+
+# JST のタイムゾーン設定
+JST = datetime.timezone(datetime.timedelta(hours=+9))
+
+# --- Logging Setup ---
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# --- Database Setup ---
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False}, echo=DEBUG)
+else:
+    engine = create_engine(DATABASE_URL, echo=DEBUG)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# --- Models (SQLAlchemy) ---
+class Company(Base):
+    __tablename__ = "companies"
+    id = Column(Integer, primary_key=True, index=True)
+    company_name = Column(String, unique=True, nullable=False)
+    company_code = Column(String, unique=True, nullable=False)
+    api_key = Column(String, unique=True, nullable=False)
+    users = relationship("User", back_populates="company", cascade="all, delete-orphan")
+    projects = relationship("Project", back_populates="company", cascade="all, delete-orphan")
+    reports = relationship("Report", back_populates="company", cascade="all, delete-orphan")
+    schedule_items = relationship("ScheduleItem", back_populates="company", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="company", cascade="all, delete-orphan")
+    inventories = relationship("Inventory", back_populates="company", cascade="all, delete-orphan")
+    blueprints = relationship("Blueprint", back_populates="company", cascade="all, delete-orphan")
+    materials = relationship("Material", back_populates="company", cascade="all, delete-orphan")
+    employees = relationship("Employee", back_populates="company", cascade="all, delete-orphan")
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    role = Column(String, default="user")
+    active = Column(Boolean, default=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    company = relationship("Company", back_populates="users")
+
+class Project(Base):
+    __tablename__ = "projects"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    location = Column(String)
+    building_type = Column(String)
+    ground_floors = Column(Integer)
+    basement_floors = Column(Integer)
+    total_floor_area = Column(Float)
+    start_date = Column(Date)
+    end_date = Column(Date)
+    project_manager = Column(String)
+    ai_plan = Column(Text)
+    progress = Column(Float, default=0.0)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    company = relationship("Company", back_populates="projects")
+    reports = relationship("Report", back_populates="project", cascade="all, delete-orphan")
+    schedule_items = relationship("ScheduleItem", back_populates="project", cascade="all, delete-orphan")
+    orders = relationship("Order", back_populates="project", cascade="all, delete-orphan")
+    inventories = relationship("Inventory", back_populates="project", cascade="all, delete-orphan")
+    blueprints = relationship("Blueprint", back_populates="project", cascade="all, delete-orphan")
+
+class Report(Base):
+    __tablename__ = "reports"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    report_text = Column(Text, nullable=False)
+    photo_url = Column(String, nullable=True)
+    audio_url = Column(String, nullable=True)
+    status = Column(String, default="pending")
+    reporter = Column(String, nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    created_at = Column(DateTime, default=lambda: dt.now(datetime.timezone.utc).astimezone(JST), nullable=False)
+    company = relationship("Company", back_populates="reports")
+    project = relationship("Project", back_populates="reports")
+
+class ScheduleItem(Base):
+    __tablename__ = "schedule_items"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    task = Column(String, nullable=False)
+    assignee = Column(String, nullable=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    status = Column(String, default="not_started")
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    project = relationship("Project", back_populates="schedule_items")
+    company = relationship("Company", back_populates="schedule_items")
+
+class Order(Base):
+    __tablename__ = "orders"
+    id = Column(Integer, primary_key=True, index=True)
+    order_number = Column(String, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    material = Column(String, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    order_status = Column(String, default="pending")
+    surplus = Column(Boolean, default=False)
+    storage = Column(String, nullable=True)
+    order_date = Column(Date, nullable=True)
+    delivery_date = Column(Date, nullable=True)
+    supplier_name = Column(String, nullable=True)
+    price = Column(Float, nullable=True)
+    total_price = Column(Float, nullable=True)
+    updated_by = Column(String, nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    project = relationship("Project", back_populates="orders")
+    company = relationship("Company", back_populates="orders")
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+    id = Column(Integer, primary_key=True, index=True)
+    material_name = Column(String, nullable=False)
+    quantity = Column(Integer, default=0)
+    location = Column(String, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    last_updated = Column(DateTime, nullable=True)
+    updated_by = Column(String, nullable=True)
+    project = relationship("Project", back_populates="inventories")
+    company = relationship("Company", back_populates="inventories")
+    history = relationship("InventoryHistory", back_populates="inventory", cascade="all, delete-orphan")
+
+class InventoryHistory(Base):
+    __tablename__ = "inventory_history"
+    id = Column(Integer, primary_key=True, index=True)
+    inventory_id = Column(Integer, ForeignKey("inventory.id"), nullable=False)
+    updated_at = Column(DateTime, default=lambda: dt.now(timezone.utc).astimezone(JST))
+    updated_by = Column(String, nullable=True)
+    change_data = Column(Text, nullable=True)
+    inventory = relationship("Inventory", back_populates="history")
+
+class Blueprint(Base):
+    __tablename__ = "blueprints"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    name = Column(String, nullable=False)
+    filename = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    version = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: dt.now(timezone.utc).astimezone(JST), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    project = relationship("Project", back_populates="blueprints")
+    company = relationship("Company", back_populates="blueprints")
+
+class Material(Base):
+    __tablename__ = "materials"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    supplier_name = Column(String, nullable=False)
+    minimum_stock = Column(Integer, nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    company = relationship("Company", back_populates="materials")
+
+class Employee(Base):
+    __tablename__ = "employees"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    qualifications = Column(String, nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    company = relationship("Company", back_populates="employees")
+
+class LineUser(Base):
+    __tablename__ = "line_users"
+    id = Column(Integer, primary_key=True, index=True)
+    line_user_id = Column(String, unique=True, nullable=False)
+    line_user_name = Column(String, nullable=True)
+    company_code = Column(String, nullable=True)
+    project_id = Column(Integer, nullable=True)
+    registered = Column(Boolean, default=False)
+    current_state = Column(String, nullable=True)
+    temp_company_code = Column(String, nullable=True)
+    temp_project_id = Column(Integer, nullable=True)
+
+# テーブル作成
+Base.metadata.create_all(bind=engine)
+# --- Schemas (Pydantic) ---
+class CompanyBaseSchema(BaseModel):
+    company_name: str
+class CompanyCreateSchema(CompanyBaseSchema):
+    company_code: Optional[str] = None
+class CompanyOutSchema(CompanyBaseSchema):
+    id: int
+    company_code: str
+    api_key: str
+    class Config:
+        from_attributes = True
+
+class UserBaseSchema(BaseModel):
+    email: str
+    role: Optional[str] = "user"
+    active: bool = True
+class UserCreateSchema(UserBaseSchema):
+    password: str
+    company_id: Optional[int] = None
+class UserOutSchema(UserBaseSchema):
+    id: int
+    company_id: Optional[int]
+    class Config:
+        from_attributes = True
+class UserUpdateSchema(BaseModel):
+    email: Optional[str] = None
+    role: Optional[str] = None
+    active: Optional[bool] = None
+    company_id: Optional[int] = None
+    password: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class ProjectBaseSchema(BaseModel):
+    name: str
+    location: Optional[str] = None
+    building_type: Optional[str] = None
+    ground_floors: Optional[int] = None
+    basement_floors: Optional[int] = None
+    total_floor_area: Optional[float] = None
+    project_manager: Optional[str] = None
+class ProjectCreateSchema(ProjectBaseSchema):
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+class ProjectSchema(ProjectBaseSchema):
+    id: int
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    ai_plan: Optional[str] = None
+    progress: Optional[float] = 0.0
+    class Config:
+        from_attributes = True
+
+class ReportBaseSchema(BaseModel):
+    project_id: int
+    report_text: str
+    photo_url: Optional[str] = None
+    audio_url: Optional[str] = None
+class ReportCreateSchema(ReportBaseSchema):
+    status: str = "pending"
+class ReportUpdateSchema(BaseModel):
+    report_text: Optional[str] = None
+    photo_url: Optional[str] = None
+    audio_url: Optional[str] = None
+    status: Optional[str] = None
+    reporter: Optional[str] = None
+    class Config:
+        from_attributes = True
+class ReportOutSchema(BaseModel):
+    id: int
+    project_id: int
+    project_name: Optional[str] = None
+    report_text: str
+    photo_url: Optional[str] = None
+    audio_url: Optional[str] = None
+    status: str
+    reporter: Optional[str] = None
+    created_at: dt
+    class Config:
+        from_attributes = True
+    @validator('created_at', pre=True, always=True)
+    def convert_created_at_to_jst(cls, v):
+        if v is None:
+            return v
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.astimezone(JST)
+
+class ScheduleItemBaseSchema(BaseModel):
+    project_id: int
+    task: str
+    assignee: Optional[str] = None
+    start_time: dt
+    end_time: dt
+class ScheduleItemCreateSchema(ScheduleItemBaseSchema):
+    status: str = "not_started"
+class ScheduleItemSchema(ScheduleItemBaseSchema):
+    id: int
+    status: str
+    class Config:
+        from_attributes = True
+
+class OrderBaseSchema(BaseModel):
+    project_id: int
+    order_number: Optional[str] = None
+    material: str
+    quantity: int
+    storage: Optional[str] = None
+    order_date: Optional[date] = None
+    delivery_date: Optional[date] = None
+    supplier_name: Optional[str] = None
+    price: Optional[float] = None
+    total_price: Optional[float] = None
+    updated_by: Optional[str] = None
+class OrderCreateSchema(OrderBaseSchema):
+    order_status: str = "pending"
+    surplus: bool = False
+class OrderSchema(OrderBaseSchema):
+    id: int
+    order_status: str
+    surplus: bool
+    class Config:
+        from_attributes = True
+
+class InventoryBaseSchema(BaseModel):
+    material_name: str
+    quantity: int
+    location: Optional[str] = None
+    project_id: int
+class InventoryCreateSchema(InventoryBaseSchema):
+    pass
+class InventorySchema(InventoryBaseSchema):
+    id: int
+    last_updated: Optional[dt] = None
+    updated_by: Optional[str] = None
+    class Config:
+        from_attributes = True
+class InventoryUpdateSchema(BaseModel):
+    material_name: Optional[str] = None
+    quantity: Optional[int] = None
+    location: Optional[str] = None
+    project_id: Optional[int] = None
+    last_updated: Optional[dt] = None
+    updated_by: Optional[str] = None
+    class Config:
+        from_attributes = True
+class InventoryHistorySchema(BaseModel):
+    id: int
+    inventory_id: int
+    updated_at: dt
+    updated_by: Optional[str] = None
+    change_data: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class BlueprintBaseSchema(BaseModel):
+    project_id: int
+    name: str
+    filename: str
+    file_path: str
+    version: Optional[str] = None
+class BlueprintCreateSchema(BlueprintBaseSchema):
+    pass
+class BlueprintOutSchema(BlueprintBaseSchema):
+    id: int
+    created_at: dt
+    company_id: int
+    class Config:
+        from_attributes = True
+
+class MaterialBaseSchema(BaseModel):
+    name: str
+    price: float
+    supplier_name: str
+    minimum_stock: int
+class MaterialCreateSchema(MaterialBaseSchema):
+    company_id: Optional[int] = None
+class MaterialSchema(MaterialBaseSchema):
+    id: int
+    company_id: Optional[int]
+    class Config:
+        from_attributes = True
+
+class EmployeeBaseSchema(BaseModel):
+    name: str
+    qualifications: Optional[str] = None
+class EmployeeCreateSchema(EmployeeBaseSchema):
+    company_id: Optional[int] = None
+class EmployeeSchema(EmployeeBaseSchema):
+    id: int
+    company_id: Optional[int]
+    class Config:
+        from_attributes = True
+
+class LineUserBaseSchema(BaseModel):
+    line_user_id: str
+    line_user_name: Optional[str] = None
+    company_code: Optional[str] = None
+    project_id: Optional[int] = None
+    registered: bool = False
+    current_state: Optional[str] = None
+class LineUserCreateSchema(LineUserBaseSchema):
+    pass
+class LineUserSchema(LineUserBaseSchema):
+    id: int
+    class Config:
+        from_attributes = True
+
+# --- Auth (Passlib, JWT) ---
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+def get_password_hash(password: str) -> str:
+    hashed = pwd_context.hash(password)
+    logger.debug("Generated hash: %r", hashed)
+    return hashed
+ACCESS_TOKEN_EXPIRE_MINUTES = 180
+def create_access_token(data: dict, expires_delta: Optional[datetime.timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = dt.now(timezone.utc) + expires_delta
+    else:
+        expire = dt.now(timezone.utc) + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    logger.debug("JWT generated with expiration=%s", expire)
+    return encoded_jwt
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="トークンの検証に失敗しました (期限切れなど)",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        email: str = payload.get("sub")
+        company_id = payload.get("company_id")
+        role = payload.get("role")
+        company_code = payload.get("company_code")
+        if email is None:
+            raise credentials_exception
+        token_data = {"email": email, "company_id": company_id, "role": role, "company_code": company_code}
+    except JWTError as e:
+        logger.debug("JWT decoding error: %s", e)
+        raise credentials_exception
+    if token_data["email"] == "admin":
+        return {"username": token_data["email"], "company_id": token_data["company_id"], "role": token_data["role"], "company_code": token_data["company_code"]}
+    if token_data["role"] == "admin" and token_data["company_id"] is not None:
+        return {"username": token_data["email"], "company_id": token_data["company_id"], "role": token_data["role"], "company_code": token_data["company_code"]}
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == token_data["email"]).first()
+        if not user:
+            logger.debug("User not found for token email: %s", token_data["email"])
+            raise credentials_exception
+        company = db.query(Company).filter(Company.id == user.company_id).first()
+        return {"username": user.email, "company_id": user.company_id, "role": user.role, "company_code": company.company_code if company else None}
+    finally:
+        db.close()
+
+# --- CRUD Functions ---
+def get_company_by_code(db: Session, company_code: str) -> Optional[Company]:
+    return db.query(Company).filter(Company.company_code == company_code).first()
+def create_company(db: Session, company_data: dict) -> Company:
+    db_company = Company(**company_data)
+    db.add(db_company)
+    db.commit()
+    db.refresh(db_company)
+    return db_company
+def get_projects(db: Session, skip: int = 0, limit: int = 100, company_id: Optional[int] = None) -> List[Project]:
+    query = db.query(Project)
+    if company_id is not None:
+        query = query.filter(Project.company_id == company_id)
+    return query.offset(skip).limit(limit).all()
+def create_project(db: Session, project_data: dict) -> Project:
+    db_project = Project(**project_data)
+    db.add(db_project)
+    db.commit()
+    db.refresh(db_project)
+    return db_project
+def update_project(db: Session, project_id: int, project_update: dict, company_id: Optional[int] = None) -> Optional[Project]:
+    project = db.query(Project).filter(Project.id == project_id)
+    if company_id is not None:
+        project = project.filter(Project.company_id == company_id)
+    project = project.first()
+    if not project:
+        return None
+    for key, value in project_update.items():
+        setattr(project, key, value)
+    db.commit()
+    db.refresh(project)
+    return project
+def delete_project(db: Session, project_id: int, company_id: Optional[int] = None) -> bool:
+    project = db.query(Project).filter(Project.id == project_id)
+    if company_id is not None:
+        project = project.filter(Project.company_id == company_id)
+    project = project.first()
+    if project:
+        db.delete(project)
+        db.commit()
+        return True
+    return False
+def get_report(db: Session, report_id: int, company_id: Optional[int] = None) -> Optional[Report]:
+    query = db.query(Report).filter(Report.id == report_id)
+    if company_id is not None:
+        query = query.filter(Report.company_id == company_id)
+    return query.first()
+def get_reports(db: Session, skip: int = 0, limit: int = 100, status: Optional[str] = None,
+                search: Optional[str] = None, company_id: Optional[int] = None) -> List[Report]:
+    query = db.query(Report)
+    if company_id is not None:
+        query = query.filter(Report.company_id == company_id)
+    if status:
+        query = query.filter(Report.status == status)
+    if search:
+        query = query.filter(Report.report_text.contains(search))
+    return query.offset(skip).limit(limit).all()
+def create_report(db: Session, report_data: dict) -> Report:
+    db_report = Report(**report_data)
+    db.add(db_report)
+    db.commit()
+    db.refresh(db_report)
+    return db_report
+def update_report(db: Session, report_id: int, report_update: dict, company_id: Optional[int] = None) -> Optional[Report]:
+    report = get_report(db, report_id, company_id)
+    if not report:
+        return None
+    for key, value in report_update.items():
+        setattr(report, key, value)
+    db.commit()
+    db.refresh(report)
+    return report
+def delete_report(db: Session, report_id: int, company_id: Optional[int] = None) -> bool:
+    report = get_report(db, report_id, company_id)
+    if report:
+        db.delete(report)
+        db.commit()
+        return True
+    return False
+def get_schedule_item(db: Session, item_id: int, company_id: Optional[int] = None) -> Optional[ScheduleItem]:
+    query = db.query(ScheduleItem).filter(ScheduleItem.id == item_id)
+    if company_id is not None:
+        query = query.filter(ScheduleItem.company_id == company_id)
+    return query.first()
+def get_schedule_items(db: Session, skip: int = 0, limit: int = 100, status: Optional[str] = None,
+                       project_id: Optional[int] = None, company_id: Optional[int] = None) -> List[ScheduleItem]:
+    query = db.query(ScheduleItem)
+    if company_id is not None:
+        query = query.filter(ScheduleItem.company_id == company_id)
+    if project_id:
+        query = query.filter(ScheduleItem.project_id == project_id)
+    if status:
+        query = query.filter(ScheduleItem.status == status)
+    return query.offset(skip).limit(limit).all()
+def create_schedule_item(db: Session, item_data: dict) -> ScheduleItem:
+    db_item = ScheduleItem(**item_data)
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
+def update_schedule_item(db: Session, item_id: int, item_update: dict, company_id: Optional[int] = None) -> Optional[ScheduleItem]:
+    item = get_schedule_item(db, item_id, company_id)
+    if not item:
+        return None
+    if "start_time" in item_update and isinstance(item_update["start_time"], str):
+        try:
+            item_update["start_time"] = dt.fromisoformat(item_update["start_time"].replace("Z", "+00:00"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Invalid start_time format")
+    if "end_time" in item_update and isinstance(item_update["end_time"], str):
+        try:
+            item_update["end_time"] = dt.fromisoformat(item_update["end_time"].replace("Z", "+00:00"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="Invalid end_time format")
+    for key, value in item_update.items():
+        setattr(item, key, value)
+    db.commit()
+    db.refresh(item)
+    return item
+def delete_schedule_item(db: Session, item_id: int, company_id: Optional[int] = None) -> bool:
+    item = get_schedule_item(db, item_id, company_id)
+    if item:
+        db.delete(item)
+        db.commit()
+        return True
+    return False
+def get_order(db: Session, order_id: int, company_id: Optional[int] = None) -> Optional[Order]:
+    query = db.query(Order).filter(Order.id == order_id)
+    if company_id is not None:
+        query = query.filter(Order.company_id == company_id)
+    return query.first()
+def create_order(db: Session, order_data: dict) -> Order:
+    if "order_number" not in order_data or not order_data["order_number"]:
+        order_data["order_number"] = str(uuid.uuid4())[:8]
+    if "price" in order_data and "quantity" in order_data:
+        try:
+            order_data["total_price"] = float(order_data["price"]) * int(order_data["quantity"])
+        except Exception:
+            order_data["total_price"] = None
+    db_order = Order(**order_data)
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+    return db_order
+def update_order(db: Session, order_id: int, order_update: dict, company_id: Optional[int] = None) -> Optional[Order]:
+    order = get_order(db, order_id, company_id)
+    if not order:
+        return None
+    for key, value in order_update.items():
+        setattr(order, key, value)
+    db.commit()
+    db.refresh(order)
+    return order
+def delete_order(db: Session, order_id: int, company_id: Optional[int] = None) -> bool:
+    order = get_order(db, order_id, company_id)
+    if order:
+        db.delete(order)
+        db.commit()
+        return True
+    return False
+def update_inventory_for_order(db: Session, order: Order, updated_by: str):
+    inventory = get_inventory_by_material_and_project(db, order.material, order.project_id, order.company_id)
+    if inventory:
+        inventory.quantity += order.quantity
+        inventory.updated_by = updated_by
+        inventory.last_updated = dt.now(timezone.utc).astimezone(JST)
+        db.commit()
+    else:
+        create_inventory(db, {
+            "project_id": order.project_id,
+            "material_name": order.material,
+            "location": order.storage,
+            "quantity": order.quantity,
+            "updated_by": updated_by,
+            "last_updated": dt.now(timezone.utc).astimezone(JST),
+            "company_id": order.company_id
+        })
+def get_inventory_by_material_and_project(db: Session, material_name: str, project_id: int, company_id: Optional[int] = None) -> Optional[Inventory]:
+    query = db.query(Inventory).filter(
+        Inventory.material_name == material_name,
+        Inventory.project_id == project_id
+    )
+    if company_id is not None:
+        query = query.filter(Inventory.company_id == company_id)
+    return query.first()
+def get_inventory(db: Session, inventory_id: int, company_id: Optional[int] = None) -> Optional[Inventory]:
+    query = db.query(Inventory).filter(Inventory.id == inventory_id)
+    if company_id is not None:
+        query = query.filter(Inventory.company_id == company_id)
+    return query.first()
+def get_inventories(db: Session, skip: int = 0, limit: int = 100, search: Optional[str] = None,
+                    project_id: Optional[int] = None, company_id: Optional[int] = None,
+                    sort: Optional[str] = None) -> List[Inventory]:
+    query = db.query(Inventory)
+    if company_id is not None:
+        query = query.filter(Inventory.company_id == company_id)
+    if search:
+        query = query.filter(Inventory.material_name.contains(search))
+    if project_id:
+        query = query.filter(Inventory.project_id == project_id)
+    if sort:
+        if sort == "id_asc":
+            query = query.order_by(Inventory.id.asc())
+        elif sort == "id_desc":
+            query = query.order_by(Inventory.id.desc())
+        elif sort == "quantity_asc":
+            query = query.order_by(Inventory.quantity.asc())
+        elif sort == "quantity_desc":
+            query = query.order_by(Inventory.quantity.desc())
+        else:
+            query = query.order_by(Inventory.id.desc())
+    else:
+        query = query.order_by(Inventory.id.desc())
+    return query.offset(skip).limit(limit).all()
+def create_inventory(db: Session, inventory_data: dict) -> Inventory:
+    db_inv = Inventory(**inventory_data)
+    db.add(db_inv)
+    db.commit()
+    db.refresh(db_inv)
+    return db_inv
+def update_inventory(db: Session, inventory_id: int, inv_update: dict,
+                     company_id: Optional[int] = None) -> Optional[Inventory]:
+    inv = get_inventory(db, inventory_id, company_id)
+    if not inv:
+        return None
+    for key, value in inv_update.items():
+        setattr(inv, key, value)
+    inv.last_updated = dt.now(timezone.utc).astimezone(JST)
+    db.commit()
+    db.refresh(inv)
+    return inv
+def delete_inventory(db: Session, inventory_id: int, company_id: Optional[int] = None) -> bool:
+    inv = get_inventory(db, inventory_id, company_id)
+    if inv:
+        db.delete(inv)
+        db.commit()
+        return True
+    return False
+def create_inventory_history(db: Session, history_data: dict) -> InventoryHistory:
+    db_history = InventoryHistory(**history_data)
+    db.add(db_history)
+    db.commit()
+    db.refresh(db_history)
+    return db_history
+def get_inventory_history(db: Session, inventory_id: int, skip: int = 0, limit: int = 100,
+                          sort: Optional[str] = None) -> List[InventoryHistory]:
+    query = db.query(InventoryHistory).filter(InventoryHistory.inventory_id == inventory_id)
+    if sort == "updated_at_asc":
+        query = query.order_by(InventoryHistory.updated_at.asc())
+    else:
+        query = query.order_by(InventoryHistory.updated_at.desc())
+    return query.offset(skip).limit(limit).all()
+def get_blueprints(db: Session, skip: int = 0, limit: int = 100, company_id: Optional[int] = None,
+                   project_id: Optional[int] = None) -> List[Blueprint]:
+    query = db.query(Blueprint)
+    if company_id is not None:
+        query = query.filter(Blueprint.company_id == company_id)
+    if project_id:
+        query = query.filter(Blueprint.project_id == project_id)
+    return query.offset(skip).limit(limit).all()
+def create_blueprint(db: Session, blueprint_data: dict) -> Blueprint:
+    db_bp = Blueprint(**blueprint_data)
+    db.add(db_bp)
+    db.commit()
+    db.refresh(db_bp)
+    return db_bp
+def delete_blueprint(db: Session, blueprint_id: int, company_id: Optional[int] = None) -> bool:
+    bp = db.query(Blueprint).filter(Blueprint.id == blueprint_id)
+    if company_id is not None:
+        bp = bp.filter(Blueprint.company_id == company_id)
+    bp = bp.first()
+    if bp:
+        db.delete(bp)
+        db.commit()
+        return True
+    return False
+def get_materials(db: Session, skip: int = 0, limit: int = 100, company_id: Optional[int] = None) -> List[Material]:
+    query = db.query(Material)
+    if company_id is not None:
+        query = query.filter(Material.company_id == company_id)
+    return query.offset(skip).limit(limit).all()
+def create_material(db: Session, material_data: dict) -> Material:
+    db_mat = Material(**material_data)
+    db.add(db_mat)
+    db.commit()
+    db.refresh(db_mat)
+    return db_mat
+def delete_material(db: Session, material_id: int, company_id: Optional[int] = None) -> bool:
+    mat = db.query(Material).filter(Material.id == material_id)
+    if company_id is not None:
+        mat = mat.filter(Material.company_id == company_id)
+    mat = mat.first()
+    if mat:
+        db.delete(mat)
+        db.commit()
+        return True
+    return False
+def get_employees(db: Session, skip: int = 0, limit: int = 100, company_id: Optional[int] = None) -> List[Employee]:
+    query = db.query(Employee)
+    if company_id is not None:
+        query = query.filter(Employee.company_id == company_id)
+    return query.offset(skip).limit(limit).all()
+def create_employee(db: Session, employee_data: dict) -> Employee:
+    db_emp = Employee(**employee_data)
+    db.add(db_emp)
+    db.commit()
+    db.refresh(db_emp)
+    return db_emp
+def delete_employee(db: Session, employee_id: int, company_id: Optional[int] = None) -> bool:
+    emp = db.query(Employee).filter(Employee.id == employee_id)
+    if company_id is not None:
+        emp = emp.filter(Employee.company_id == company_id)
+    emp = emp.first()
+    if emp:
+        db.delete(emp)
+        db.commit()
+        return True
+    return False
+def get_line_user(db: Session, line_user_id: str) -> Optional[LineUser]:
+    return db.query(LineUser).filter(LineUser.line_user_id == line_user_id).first()
+def create_line_user(db: Session, line_user_id: str, user_name: str = "") -> LineUser:
+    new_line_user = LineUser(
+        line_user_id=line_user_id,
+        line_user_name=user_name,
+        registered=False
+    )
+    db.add(new_line_user)
+    db.commit()
+    db.refresh(new_line_user)
+    return new_line_user
+def update_line_user(db: Session, line_user: LineUser, updates: dict) -> LineUser:
+    for key, val in updates.items():
+        setattr(line_user, key, val)
+    db.commit()
+    db.refresh(line_user)
+    return line_user
+# --- FastAPI App Setup ---
+app = FastAPI()
+
+app.add_middleware(CacheControlMiddleware)
+
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+app.mount("/files", StaticFiles(directory="files", html=True), name="files")
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()}
+    )
+
+# --- Endpoints ---
+@app.get("/")
+async def root():
+    return RedirectResponse("/static/pages/admin_login.html")
+
+@app.post("/admin-security")
+async def admin_security(admin_key: str = Form(...), db: Session = Depends(get_db)):
+    key = admin_key.strip()
+    if not os.getenv("ADMIN_API_KEY") or not os.getenv("JWT_SECRET"):
+        raise HTTPException(status_code=500, detail="Server configuration error")
+    if key == os.getenv("ADMIN_API_KEY").strip():
+        token = create_access_token({"sub": "admin", "company_id": None, "role": "admin", "company_code": None})
+        return JSONResponse(content={
+            "access_token": token,
+            "token_type": "bearer",
+            "redirect_url": "/static/pages/admin_dashboard.html"
+        })
+    company = db.query(Company).filter(Company.api_key == key).first()
+    if company:
+        token = create_access_token({"sub": company.company_name, "company_id": company.id, "role": "admin", "company_code": company.company_code})
+        return JSONResponse(content={
+            "access_token": token,
+            "token_type": "bearer",
+            "redirect_url": "/static/pages/project_management.html"
+        })
+    raise HTTPException(status_code=401, detail="無効な管理者APIキーです")
+
+@app.post("/token")
+async def token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="メールアドレスまたはパスワードが間違っています")
+    company = db.query(Company).filter(Company.id == user.company_id).first()
+    access_token = create_access_token({
+        "sub": user.email,
+        "company_id": user.company_id,
+        "role": user.role,
+        "company_code": company.company_code if company else None
+    })
+    logger.debug(f"Token created for user: {user.email}")
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/companies")
+async def list_companies(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    companies = db.query(Company).all()
+    return [{"id": c.id, "company_name": c.company_name, "company_code": c.company_code, "api_key": c.api_key} for c in companies]
+
+@app.post("/company-registration", status_code=201)
+async def create_company_endpoint(company: CompanyCreateSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    new_company = Company(
+        company_name=company.company_name,
+        company_code=str(uuid.uuid4())[:8],
+        api_key=str(uuid.uuid4())
+    )
+    db.add(new_company)
+    db.commit()
+    db.refresh(new_company)
+    return {"id": new_company.id, "company_name": new_company.company_name, "company_code": new_company.company_code, "api_key": new_company.api_key}
+
+@app.get("/projects")
+async def list_projects(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    company_id = current_user.get("company_id")
+    projects = db.query(Project).filter(Project.company_id == company_id).all()
+    result = [{"id": p.id, "name": p.name} for p in projects]
+    logger.debug(f"Projects returned: {result}")
+    return result
+
+@app.post("/projects", status_code=201)
+async def create_project_endpoint(project: ProjectCreateSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    project_data = project.dict()
+    project_data["company_id"] = current_user.get("company_id")
+    new_project = create_project(db, project_data)
+    return {"id": new_project.id, "name": new_project.name}
+
+@app.put("/projects/{project_id}")
+async def update_project_endpoint(project_id: int, project_update: ProjectCreateSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    updated = update_project(db, project_id, project_update.dict(), current_user.get("company_id"))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"id": updated.id, "name": updated.name}
+
+@app.delete("/projects/{project_id}")
+async def delete_project_endpoint(project_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    success = delete_project(db, project_id, current_user.get("company_id"))
+    if not success:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"detail": "Deleted"}
+
+@app.get("/orders")
+async def list_orders(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    company_id = current_user.get("company_id")
+    orders = db.query(Order).options(joinedload(Order.project)).filter(Order.company_id == company_id).all()
+    result = [
+        {
+            "id": o.id,
+            "order_number": o.order_number or "-",
+            "project_id": o.project_id,
+            "project_name": o.project.name if o.project else None,
+            "material": o.material,
+            "quantity": o.quantity,
+            "order_status": o.order_status,
+            "surplus": o.surplus,
+            "storage": o.storage,
+            "order_date": o.order_date.isoformat() if o.order_date else None,
+            "delivery_date": o.delivery_date.isoformat() if o.delivery_date else None,
+            "supplier_name": o.supplier_name,
+            "price": o.price,
+            "total_price": o.total_price,
+            "updated_by": o.updated_by
+        } for o in orders
+    ]
+    logger.debug(f"Orders returned: {len(result)} items")
+    return result
+
+@app.post("/orders", status_code=201)
+async def create_order_endpoint(order: OrderCreateSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    order_data = order.dict()
+    order_data["company_id"] = current_user.get("company_id")
+    order_data["updated_by"] = current_user.get("username")
+    new_order = create_order(db, order_data)
+    return {"id": new_order.id, "order_number": new_order.order_number}
+
+@app.put("/orders/{order_id}")
+async def update_order_endpoint(order_id: int, order_update: OrderSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    order_data = order_update.dict(exclude_unset=True)
+    order_data["updated_by"] = current_user.get("username")
+    updated = update_order(db, order_id, order_data, current_user.get("company_id"))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if updated.order_status == "delivered":
+        update_inventory_for_order(db, updated, current_user.get("username"))
+    return {"id": updated.id, "order_number": updated.order_number}
+
+@app.delete("/orders/{order_id}")
+async def delete_order_endpoint(order_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    success = delete_order(db, order_id, current_user.get("company_id"))
+    if not success:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return {"detail": "Deleted"}
+
+@app.get("/inventory")
+async def list_inventory(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+                        skip: int = 0, limit: int = 100, search: Optional[str] = None,
+                        project_id: Optional[int] = None, sort: Optional[str] = None):
+    company_id = current_user.get("company_id")
+    inventories = get_inventories(db, skip, limit, search, project_id, company_id, sort)
+    return [InventorySchema.from_orm(inv) for inv in inventories]
+
+@app.post("/inventory", status_code=201)
+async def create_inventory_endpoint(inventory: InventoryCreateSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    inventory_data = inventory.dict()
+    inventory_data["company_id"] = current_user.get("company_id")
+    inventory_data["updated_by"] = current_user.get("username")
+    new_inv = create_inventory(db, inventory_data)
+    return {"id": new_inv.id, "material_name": new_inv.material_name}
+
+@app.put("/inventory/{inventory_id}")
+async def update_inventory_endpoint(inventory_id: int, inventory_update: InventoryUpdateSchema,
+                                    db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    inv_update = inventory_update.dict(exclude_unset=True)
+    inv_update["updated_by"] = current_user.get("username")
+    updated = update_inventory(db, inventory_id, inv_update, current_user.get("company_id"))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Inventory not found")
+    return {"id": updated.id, "material_name": updated.material_name}
+
+@app.delete("/inventory/{inventory_id}")
+async def delete_inventory_endpoint(inventory_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    success = delete_inventory(db, inventory_id, current_user.get("company_id"))
+    if not success:
+        raise HTTPException(status_code=404, detail="Inventory not found")
+    return {"detail": "Deleted"}
+
+@app.get("/inventory/{inventory_id}/history")
+async def get_inventory_history_endpoint(inventory_id: int, db: Session = Depends(get_db),
+                                         current_user: dict = Depends(get_current_user),
+                                         skip: int = 0, limit: int = 100, sort: Optional[str] = None):
+    company_id = current_user.get("company_id")
+    inv = get_inventory(db, inventory_id, company_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Inventory not found")
+    history = get_inventory_history(db, inventory_id, skip, limit, sort)
+    return [InventoryHistorySchema.from_orm(h) for h in history]
+
+@app.post("/upload-blueprint", status_code=201)
+async def upload_blueprint(project_id: int = Form(...), name: str = Form(...), file: UploadFile = File(...),
+                           db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    company_id = current_user.get("company_id")
+    os.makedirs("files/blueprints", exist_ok=True)
+    file_extension = file.filename.split(".")[-1]
+    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+    file_path = f"files/blueprints/{unique_filename}"
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+    blueprint_data = {
+        "project_id": project_id,
+        "name": name,
+        "filename": unique_filename,
+        "file_path": file_path,
+        "company_id": company_id
+    }
+    new_bp = create_blueprint(db, blueprint_data)
+    return {"id": new_bp.id, "name": new_bp.name, "file_path": new_bp.file_path}
+
+@app.get("/blueprints")
+async def list_blueprints(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+                          skip: int = 0, limit: int = 100, project_id: Optional[int] = None):
+    company_id = current_user.get("company_id")
+    blueprints = get_blueprints(db, skip, limit, company_id, project_id)
+    return [BlueprintOutSchema.from_orm(bp) for bp in blueprints]
+
+@app.get("/blueprints/{blueprint_id}/download")
+async def download_blueprint(blueprint_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    company_id = current_user.get("company_id")
+    bp = db.query(Blueprint).filter(Blueprint.id == blueprint_id, Blueprint.company_id == company_id).first()
+    if not bp:
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+    return FileResponse(bp.file_path, filename=bp.filename)
+
+@app.delete("/blueprints/{blueprint_id}")
+async def delete_blueprint_endpoint(blueprint_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    success = delete_blueprint(db, blueprint_id, current_user.get("company_id"))
+    if not success:
+        raise HTTPException(status_code=404, detail="Blueprint not found")
+    return {"detail": "Deleted"}
+
+@app.post("/line/webhook")
+async def line_webhook(request: Request, db: Session = Depends(get_db)):
+    signature = request.headers.get("X-Line-Signature")
+    body = await request.body()
+    try:
+        events = parser.parse(body.decode(), signature)
+    except InvalidSignatureError:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    for event in events:
+        if isinstance(event, MessageEvent):
+            user_id = event.source.user_id
+            line_user = get_line_user(db, user_id)
+            if not line_user:
+                profile = line_api.get_profile(user_id)
+                line_user = create_line_user(db, user_id, profile.display_name)
+            if isinstance(event.message, TextMessage):
+                text = event.message.text.strip()
+                if not line_user.registered:
+                    if not line_user.temp_company_code:
+                        company = get_company_by_code(db, text)
+                        if company:
+                            update_line_user(db, line_user, {"temp_company_code": company.company_code, "current_state": "selecting_project"})
+                            projects = get_projects(db, company_id=company.id)
+                            if projects:
+                                buttons = [QuickReplyButton(action=MessageAction(label=p.name[:20], text=str(p.id))) for p in projects[:13]]
+                                line_api.reply_message(event.reply_token, TextSendMessage(
+                                    text="プロジェクトを選択してください",
+                                    quick_reply=QuickReply(items=buttons)
+                                ))
+                            else:
+                                line_api.reply_message(event.reply_token, TextSendMessage(text="この会社にプロジェクトがありません"))
+                        else:
+                            line_api.reply_message(event.reply_token, TextSendMessage(text="会社コードが正しくありません。もう一度入力してください"))
+                    elif line_user.current_state == "selecting_project":
+                        try:
+                            project_id = int(text)
+                            project = db.query(Project).filter(Project.id == project_id, Project.company_id == db.query(Company).filter(Company.company_code == line_user.temp_company_code).first().id).first()
+                            if project:
+                                update_line_user(db, line_user, {
+                                    "company_code": line_user.temp_company_code,
+                                    "project_id": project_id,
+                                    "registered": True,
+                                    "temp_company_code": None,
+                                    "current_state": None
+                                })
+                                line_api.reply_message(event.reply_token, TextSendMessage(text=f"登録が完了しました！\n会社: {project.company.company_name}\nプロジェクト: {project.name}"))
+                            else:
+                                line_api.reply_message(event.reply_token, TextSendMessage(text="無効なプロジェクトIDです"))
+                        except ValueError:
+                            line_api.reply_message(event.reply_token, TextSendMessage(text="プロジェクトIDを数値で入力してください"))
+                else:
+                    report_data = {
+                        "project_id": line_user.project_id,
+                        "report_text": text,
+                        "company_id": db.query(Company).filter(Company.company_code == line_user.company_code).first().id,
+                        "reporter": line_user.line_user_name
+                    }
+                    create_report(db, report_data)
+                    line_api.reply_message(event.reply_token, TextSendMessage(text="レポートを受け付けました"))
+            elif isinstance(event.message, ImageMessage):
+                if line_user.registered:
+                    message_content = line_api.get_message_content(event.message.id)
+                    file_extension = "jpg" if event.message.content_type == "image/jpeg" else "png"
+                    unique_filename = f"{uuid.uuid4()}.{file_extension}"
+                    file_path = f"files/photos/{unique_filename}"
+                    os.makedirs("files/photos", exist_ok=True)
+                    with open(file_path, "wb") as f:
+                        f.write(message_content.content)
+                    report_data = {
+                        "project_id": line_user.project_id,
+                        "report_text": "画像レポート",
+                        "photo_url": file_path,
+                        "company_id": db.query(Company).filter(Company.company_code == line_user.company_code).first().id,
+                        "reporter": line_user.line_user_name
+                    }
+                    create_report(db, report_data)
+                    line_api.reply_message(event.reply_token, TextSendMessage(text="画像レポートを受け付けました"))
+    return {"status": "ok"}
+
+# WebSocket for real-time updates
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.broadcast(f"Message: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast("A client disconnected")

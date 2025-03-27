@@ -1,0 +1,30 @@
+<!-- partials/sidebar.html -->
+<div id="sidebar" class="flex-shrink-0 bg-dark text-white" style="width:240px; min-height:100vh;">
+  <div class="text-center py-3">
+    <h4 class="text-white">BuildConnect</h4>
+  </div>
+  <nav class="nav flex-column px-3">
+    <!-- Ajaxで読み込む場合は href="#" にし、onclick="loadContent(...)" で部分読み込み -->
+    <a class="nav-link text-white" href="#" onclick="loadContent('project_management.html', this)">
+      <i class="fas fa-clipboard-list"></i> プロジェクト管理
+    </a>
+    <a class="nav-link text-white" href="#" onclick="loadContent('order_management.html', this)">
+      <i class="fas fa-truck"></i> 発注管理
+    </a>
+    <a class="nav-link text-white" href="#" onclick="loadContent('reports_page_extension.html', this)">
+      <i class="fas fa-file-alt"></i> 施工報告
+    </a>
+    <a class="nav-link text-white" href="#" onclick="loadContent('schedule_management.html', this)">
+      <i class="fas fa-calendar-alt"></i> スケジュール管理
+    </a>
+    <a class="nav-link text-white" href="#" onclick="loadContent('talent_matching.html', this)">
+      <i class="fas fa-user-friends"></i> 人材マッチング
+    </a>
+    <a class="nav-link text-white" href="#" onclick="loadContent('ma_support.html', this)">
+      <i class="fas fa-handshake"></i> M&amp;A支援
+    </a>
+    <a class="nav-link text-white" href="#" onclick="loadContent('inventory_management.html', this)">
+      <i class="fas fa-boxes"></i> 資材在庫管理
+    </a>
+  </nav>
+</div>

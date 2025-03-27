@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>dhtmlxGantt</title>
+  <link rel="stylesheet" href="https://cdn.dhtmlx.com/gantt/edge/dhtmlxgantt.css">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      box-sizing: border-box;
+    }
+    /* ガントチャートコンテナ：横幅100%以内に収まり、はみ出す場合は横スクロール */
+    #gantt_here {
+      width: 100%;
+      max-width: 100%;
+      height: calc(100vh - 50px);
+      overflow-x: auto;
+      box-sizing: border-box;
+    }
+    header {
+      background-color: #343a40;
+      color: #fff;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>dhtmlxGantt</h1>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+    </div>
+  </header>
+  <div id="gantt_here"></div>
+  <script src="https://cdn.dhtmlx.com/gantt/edge/dhtmlxgantt.js"></script>
+  <script>
+    // JWT解析用関数（必要に応じて使用）
+    function parseJwt(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+          console.error("Invalid token format:", token);
+          return null;
+        }
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("JWT parsing error:", e);
+        return null;
+      }
+    }
+    function loadCompanyInfo() {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      const payload = parseJwt(token);
+      if (payload) {
+        const companyName = payload.sub || "Unknown Company";
+        const companyCode = payload.company_code || "No Code";
+        document.getElementById("userInfo").textContent = `${companyName} (${companyCode})`;
+      }
+    }
+    loadCompanyInfo();
+
+    // dhtmlxGantt の設定
+    gantt.config.xml_date = "%Y-%m-%d";
+    gantt.config.readonly = false;
+    gantt.config.columns = [
+      { name: "text", label: "作業名", tree: true, width: "*" },
+      { name: "start_date", label: "開始日", align: "center" },
+      { name: "end_date", label: "完了日", align: "center", template: function(obj) {
+          const endDate = gantt.calculateEndDate(obj.start_date, obj.duration);
+          return gantt.templates.date_grid(endDate);
+        }
+      },
+      { name: "duration", label: "期間(日)", align: "center" },
+      { name: "add", label: "", width: 44 }
+    ];
+    gantt.config.scale_unit = "day";
+    gantt.config.date_scale = "%m/%d";
+    gantt.config.scale_height = 50;
+    gantt.config.subscales = [
+      { unit: "month", step: 1, date: "%Y年 %n月" }
+    ];
+    gantt.templates.task_text = function(start, end, task) {
+      return task.text + " (" + Math.round(task.progress * 100) + "%)";
+    };
+    // 自動サイズ調整
+    gantt.config.autosize = "xy";
+
+    gantt.init("gantt_here");
+    // タイムラインをコンテナ幅に合わせる
+    gantt.fit();
+    window.addEventListener("resize", function() {
+      gantt.fit();
+    });
+    // ※ タスクデータはサーバー側から動的に取得してください
+    // 例: gantt.parse(tasks);
+  </script>
+</body>
+</html>

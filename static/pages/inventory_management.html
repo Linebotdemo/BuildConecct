@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>BuildConnect - 資材在庫管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { background-color: #f8f9fa; }
+    #header { background-color: #343a40; color: #fff; padding: 10px 20px; }
+    #sidebar { width: 240px; background-color: #495057; min-height: 100vh; padding-top: 20px; }
+    #sidebar .nav-link { color: #fff; margin-bottom: 1rem; display: block; padding: 5px 10px; border-radius: 0.25rem; text-decoration: none; width: 100%; box-sizing: border-box; }
+    #sidebar .nav-link:hover, #sidebar .nav-link.active { background-color: #6c757d; }
+    #main-content { margin-left: 240px; padding: 20px; }
+    table th, table td { vertical-align: middle; }
+    .pagination { margin-top: 20px; }
+    #inventorySortSelect { width: 100%; }
+    .table tr.highlight-red td { background-color: #ffcccc !important; }
+  </style>
+</head>
+<body>
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3>BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+      <button class="btn btn-outline-light btn-sm" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+  <div class="d-flex">
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link" href="project_management.html">プロジェクト管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="order_management.html">発注管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="reports.html">施工報告</a></li>
+        <li class="nav-item"><a class="nav-link" href="schedule_management.html">スケジュール管理</a></li>
+        <li class="nav-item"><a class="nav-link active" href="inventory_management.html">資材在庫管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="registration.html">登録管理</a></li>
+      </ul>
+    </nav>
+    <div id="main-content" class="w-100">
+      <h2>資材在庫管理</h2>
+      <div class="row g-2 mb-3">
+        <div class="col-md-3"><input type="text" id="searchProject" class="form-control" placeholder="プロジェクト名"></div>
+        <div class="col-md-3"><input type="text" id="searchMaterial" class="form-control" placeholder="資材名"></div>
+        <div class="col-md-3"><input type="text" id="searchLocation" class="form-control" placeholder="保管場所"></div>
+        <div class="col-md-3 mt-2">
+          <select id="inventorySortSelect" class="form-select">
+            <option value="">並び替えなし</option>
+            <option value="project_asc">プロジェクト名 昇順</option>
+            <option value="project_desc">プロジェクト名 降順</option>
+            <option value="material_asc">資材名 昇順</option>
+            <option value="material_desc">資材名 降順</option>
+            <option value="quantity_asc">数量 昇順</option>
+            <option value="quantity_desc">数量 降順</option>
+            <option value="location_asc">保管場所 昇順</option>
+            <option value="location_desc">保管場所 降順</option>
+          </select>
+        </div>
+        <div class="col-md-3 mt-2 text-end">
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addInventoryModal">
+            <i class="fas fa-plus"></i> 新規在庫追加
+          </button>
+        </div>
+      </div>
+      <table class="table table-striped" id="inventoryTable">
+        <thead>
+          <tr>
+            <th>プロジェクト名</th>
+            <th>資材名</th>
+            <th>数量</th>
+            <th>保管場所</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <nav><ul class="pagination" id="pagination"></ul></nav>
+      <div class="modal fade" id="addInventoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="addInventoryForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">新規在庫追加</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="キャンセル" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3"><label for="inventoryProjectSelect" class="form-label">プロジェクト</label><select id="inventoryProjectSelect" class="form-select" required></select></div>
+              <div class="mb-3"><label for="inventoryMaterialSelect" class="form-label">資材名</label><select id="inventoryMaterialSelect" class="form-select" required></select></div>
+              <div class="mb-3"><label for="inventoryQuantity" class="form-label">数量</label><input type="number" class="form-control" id="inventoryQuantity" required value="1"></div>
+              <div class="mb-3"><label for="inventoryLocation" class="form-label">保管場所</label><input type="text" class="form-control" id="inventoryLocation"></div>
+              <div class="mb-3"><label for="inventoryUpdatedBySelect" class="form-label">更新者</label><select id="inventoryUpdatedBySelect" class="form-select" required></select></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">キャンセル</button>
+              <button type="submit" class="btn btn-primary">登録</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="modal fade" id="editInventoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="editInventoryForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">在庫情報編集</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="キャンセル" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="editInventoryGroupKey">
+              <div class="mb-3"><label for="editInventoryProjectSelect" class="form-label">プロジェクト</label><select id="editInventoryProjectSelect" class="form-select" required disabled></select></div>
+              <div class="mb-3"><label for="editInventoryMaterialSelect" class="form-label">資材名</label><select id="editInventoryMaterialSelect" class="form-select" required disabled></select></div>
+              <div class="mb-3"><label for="editInventoryQuantity" class="form-label">数量</label><input type="number" class="form-control" id="editInventoryQuantity" required></div>
+              <div class="mb-3"><label for="editInventoryLocation" class="form-label">保管場所</label><input type="text" class="form-control" id="editInventoryLocation" disabled></div>
+              <div class="mb-3"><label for="editInventoryUpdatedBySelect" class="form-label">更新者</label><select id="editInventoryUpdatedBySelect" class="form-select" required></select></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">在庫履歴</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="閉じる" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table table-bordered" id="historyTable">
+                <thead><tr><th>更新日時</th><th>更新者</th><th>変更内容</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">閉じる</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API_BASE = "/";
+    const authToken = localStorage.getItem("authToken") || "";
+    let projectMap = {};
+    let allInventory = [];
+    let employeeData = [];
+    let requiredMaterials = [];
+    let currentUser = "";
+    const rowsPerPage = 15;
+    let currentPage = 1;
+    let currentFilteredInventory = [];
+    let orderFromOrderManagement = null;
+
+    function parseOrderInfo() {
+      const params = new URLSearchParams(window.location.search);
+      const order_id = params.get("order_id");
+      const supplier_name = params.get("supplier_name");
+      if (order_id && supplier_name) {
+        orderFromOrderManagement = { order_id, supplier_name };
+        console.log("Order from URL:", orderFromOrderManagement);
+      } else {
+        const stored = localStorage.getItem("orderFromOrderManagement");
+        if (stored) {
+          orderFromOrderManagement = JSON.parse(stored);
+          localStorage.removeItem("orderFromOrderManagement");
+          console.log("Order from localStorage:", orderFromOrderManagement);
+        }
+      }
+    }
+    parseOrderInfo();
+
+    function parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("JWT parse error:", e);
+        return null;
+      }
+    }
+    function loadCompanyInfo() {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      const payload = parseJwt(token);
+      if (payload) {
+        document.getElementById("userInfo").textContent = `${payload.sub} (${payload.company_code || "No Code"})`;
+        currentUser = payload.sub;
+        console.log("Current user:", currentUser);
+      }
+    }
+    loadCompanyInfo();
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("authToken");
+      window.location.href = "admin_login.html";
+    });
+
+    async function fetchProjectsForInventorySelect() {
+      try {
+        const res = await fetch(API_BASE + "projects", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) throw new Error("Failed to fetch projects: " + res.status);
+        const projects = await res.json();
+        const inventoryProjSelect = document.getElementById("inventoryProjectSelect");
+        const editProjSelect = document.getElementById("editInventoryProjectSelect");
+        inventoryProjSelect.innerHTML = "";
+        editProjSelect.innerHTML = "";
+        projectMap = {};
+        projects.forEach(proj => {
+          projectMap[proj.id] = proj.name;
+          const option = document.createElement("option");
+          option.value = proj.id;
+          option.textContent = proj.name;
+          inventoryProjSelect.appendChild(option.cloneNode(true));
+          editProjSelect.appendChild(option.cloneNode(true));
+        });
+        console.log("Projects loaded:", projectMap);
+      } catch (err) {
+        console.error(err);
+        alert(err.message);
+      }
+    }
+
+    async function loadEmployees() {
+      try {
+        const response = await fetch(API_BASE + "registration/employees", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!response.ok) throw new Error("Failed to fetch employees: " + response.status);
+        employeeData = await response.json();
+        updateEmployeeSelect("inventoryUpdatedBySelect", employeeData);
+        updateEmployeeSelect("editInventoryUpdatedBySelect", employeeData);
+        console.log("Employees loaded:", employeeData);
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+      }
+    }
+    function updateEmployeeSelect(elementId, employees) {
+      const select = document.getElementById(elementId);
+      if (!select) return;
+      select.innerHTML = "";
+      employees.forEach(emp => {
+        const option = document.createElement("option");
+        option.value = emp.name;
+        option.textContent = emp.name;
+        select.appendChild(option);
+      });
+      select.value = currentUser;
+    }
+
+    async function loadRequiredMaterials() {
+      try {
+        const res = await fetch(API_BASE + "registration/materials", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) throw new Error("Failed to fetch materials: " + res.status);
+        requiredMaterials = await res.json();
+        updateMaterialSelect("inventoryMaterialSelect", requiredMaterials);
+        updateMaterialSelect("editInventoryMaterialSelect", requiredMaterials);
+        console.log("Materials loaded:", requiredMaterials);
+      } catch (err) {
+        console.error(err);
+        alert("資材一覧の取得に失敗しました");
+      }
+    }
+    function updateMaterialSelect(elementId, materials) {
+      const select = document.getElementById(elementId);
+      if (!select) return;
+      select.innerHTML = "<option value=''>選択してください</option>";
+      materials.forEach(mat => {
+        const option = document.createElement("option");
+        option.value = mat.name;
+        option.textContent = mat.name;
+        select.appendChild(option);
+      });
+    }
+
+    async function loadInventory() {
+      try {
+        const res = await fetch(API_BASE + "inventory?limit=1000", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) throw new Error("Failed to fetch inventory: " + res.status);
+        allInventory = await res.json();
+        console.log("Raw inventory data:", allInventory);
+        currentPage = 1;
+        const groupedInventory = groupInventory(allInventory);
+        console.log("Grouped inventory:", groupedInventory);
+        renderInventoryTable(groupedInventory);
+      } catch (err) {
+        console.error("Load inventory error:", err);
+        alert(err.message);
+        allInventory = [];
+        renderInventoryTable([]);
+      }
+    }
+
+    function groupInventory(inventory) {
+      const grouped = {};
+      inventory.forEach(item => {
+        const key = `${item.project_id}-${item.material_name}-${item.location || 'null'}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            project_id: item.project_id,
+            material_name: item.material_name,
+            quantity: 0,
+            location: item.location,
+            updated_by: item.updated_by,
+            ids: []
+          };
+        }
+        grouped[key].quantity += item.quantity || 0;
+        grouped[key].ids.push(item.id);
+      });
+      return Object.values(grouped);
+    }
+
+    function renderInventoryTable(inventory) {
+      const tbody = document.querySelector("#inventoryTable tbody");
+      tbody.innerHTML = "";
+      currentFilteredInventory = inventory;
+      const start = (currentPage - 1) * rowsPerPage;
+      const pageData = inventory.slice(start, start + rowsPerPage);
+
+      console.log("Rendering table: page=", currentPage, "start=", start, "items=", pageData.length);
+
+      pageData.forEach(item => {
+        const projName = projectMap[item.project_id] || "不明プロジェクト";
+        const materialName = (item.material_name || "-").trim();
+        const quantity = item.quantity || 0;
+        const location = item.location || "-";
+        const required = requiredMaterials.find(m => (m.name || "").trim().toLowerCase() === materialName.toLowerCase());
+        const minStock = required ? Number(required.minimum_stock) : 0;
+        const isBelowRequired = quantity < minStock;
+
+        const tr = document.createElement("tr");
+        if (isBelowRequired) tr.classList.add("highlight-red");
+        tr.innerHTML = `
+          <td>${projName}</td>
+          <td>${materialName}</td>
+          <td>${quantity}</td>
+          <td>${location}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary me-1" onclick="openEditInventoryModal('${item.project_id}-${item.material_name}-${item.location || 'null'}')">編集</button>
+            <button class="btn btn-sm btn-danger me-1" onclick="deleteInventory('${item.project_id}-${item.material_name}-${item.location || 'null'}')">削除</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+      renderPagination(inventory.length);
+    }
+
+    function renderPagination(totalItems) {
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      const paginationUl = document.getElementById("pagination");
+      paginationUl.innerHTML = "";
+
+      const prevLi = document.createElement("li");
+      prevLi.className = "page-item" + (currentPage === 1 ? " disabled" : "");
+      const prevA = document.createElement("a");
+      prevA.className = "page-link";
+      prevA.href = "#";
+      prevA.innerText = "前へ";
+      prevA.addEventListener("click", e => {
+        e.preventDefault();
+        if (currentPage > 1) {
+          currentPage--;
+          renderInventoryTable(currentFilteredInventory);
+        }
+      });
+      prevLi.appendChild(prevA);
+      paginationUl.appendChild(prevLi);
+
+      for (let i = 1; i <= totalPages; i++) {
+        const li = document.createElement("li");
+        li.className = "page-item" + (i === currentPage ? " active" : "");
+        const a = document.createElement("a");
+        a.className = "page-link";
+        a.href = "#";
+        a.innerText = i;
+        a.addEventListener("click", e => {
+          e.preventDefault();
+          currentPage = i;
+          renderInventoryTable(currentFilteredInventory);
+        });
+        li.appendChild(a);
+        paginationUl.appendChild(li);
+      }
+
+      const nextLi = document.createElement("li");
+      nextLi.className = "page-item" + (currentPage === totalPages ? " disabled" : "");
+      const nextA = document.createElement("a");
+      nextA.className = "page-link";
+      nextA.href = "#";
+      nextA.innerText = "次へ";
+      nextA.addEventListener("click", e => {
+        e.preventDefault();
+        if (currentPage < totalPages) {
+          currentPage++;
+          renderInventoryTable(currentFilteredInventory);
+        }
+      });
+      nextLi.appendChild(nextA);
+      paginationUl.appendChild(nextLi);
+    }
+
+    function sortInventory() {
+      const sortCriteria = document.getElementById("inventorySortSelect").value;
+      let sorted = [...currentFilteredInventory];
+      if (sortCriteria === "project_asc") sorted.sort((a, b) => (projectMap[a.project_id] || "").localeCompare(projectMap[b.project_id] || ""));
+      else if (sortCriteria === "project_desc") sorted.sort((a, b) => (projectMap[b.project_id] || "").localeCompare(projectMap[a.project_id] || ""));
+      else if (sortCriteria === "material_asc") sorted.sort((a, b) => (a.material_name || "").localeCompare(b.material_name || ""));
+      else if (sortCriteria === "material_desc") sorted.sort((a, b) => (b.material_name || "").localeCompare(a.material_name || ""));
+      else if (sortCriteria === "quantity_asc") sorted.sort((a, b) => (a.quantity || 0) - (b.quantity || 0));
+      else if (sortCriteria === "quantity_desc") sorted.sort((a, b) => (b.quantity || 0) - (a.quantity || 0));
+      else if (sortCriteria === "location_asc") sorted.sort((a, b) => (a.location || "").localeCompare(b.location || ""));
+      else if (sortCriteria === "location_desc") sorted.sort((a, b) => (b.location || "").localeCompare(a.location || ""));
+      currentPage = 1;
+      renderInventoryTable(sorted);
+    }
+
+    function filterInventory() {
+      let filtered = groupInventory(allInventory);
+      const searchProject = document.getElementById("searchProject").value.toLowerCase().trim();
+      const searchMaterial = document.getElementById("searchMaterial").value.toLowerCase().trim();
+      const searchLocation = document.getElementById("searchLocation").value.toLowerCase().trim();
+
+      if (searchProject) filtered = filtered.filter(item => (projectMap[item.project_id] || "").toLowerCase().includes(searchProject));
+      if (searchMaterial) filtered = filtered.filter(item => (item.material_name || "").toLowerCase().includes(searchMaterial));
+      if (searchLocation) filtered = filtered.filter(item => (item.location || "").toLowerCase().includes(searchLocation));
+      currentPage = 1;
+      renderInventoryTable(filtered);
+    }
+
+    async function addInventory(e) {
+      e.preventDefault();
+      const project_id = parseInt(document.getElementById("inventoryProjectSelect").value);
+      const material_name = document.getElementById("inventoryMaterialSelect").value;
+      const quantity = parseInt(document.getElementById("inventoryQuantity").value);
+      const location = document.getElementById("inventoryLocation").value.trim();
+      const updated_by = orderFromOrderManagement ? `発注ID:${orderFromOrderManagement.order_id} ${orderFromOrderManagement.supplier_name}` : document.getElementById("inventoryUpdatedBySelect").value;
+      const payload = { project_id, material_name, quantity, location: location || null, updated_by };
+      try {
+        const res = await fetch(API_BASE + "inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error("在庫登録に失敗しました: " + await res.text());
+        const created = await res.json();
+        console.log("Added inventory:", created);
+        alert("在庫登録完了! ID:" + created.id);
+        await loadInventory();
+        const modalEl = document.getElementById("addInventoryModal");
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.hide();
+        document.getElementById("addInventoryForm").reset();
+        document.getElementById("inventoryUpdatedBySelect").value = currentUser;
+      } catch (err) {
+        console.error("Add inventory error:", err);
+        alert(err.message);
+      }
+    }
+
+    function openEditInventoryModal(groupKey) {
+      const item = currentFilteredInventory.find(i => `${i.project_id}-${i.material_name}-${i.location || 'null'}` === groupKey);
+      if (!item) {
+        console.error("Edit target not found for groupKey:", groupKey);
+        alert("編集対象の在庫が見つかりません");
+        return;
+      }
+      console.log("Opening edit modal for:", item);
+      document.getElementById("editInventoryGroupKey").value = groupKey;
+      document.getElementById("editInventoryProjectSelect").value = item.project_id;
+      document.getElementById("editInventoryMaterialSelect").value = item.material_name || "";
+      document.getElementById("editInventoryQuantity").value = item.quantity || "";
+      document.getElementById("editInventoryLocation").value = item.location || "";
+      document.getElementById("editInventoryUpdatedBySelect").value = item.updated_by || currentUser;
+      const modalEl = document.getElementById("editInventoryModal");
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      modal.show();
+    }
+
+    async function updateInventory(e) {
+      e.preventDefault();
+      const groupKey = document.getElementById("editInventoryGroupKey").value;
+      const item = currentFilteredInventory.find(i => `${i.project_id}-${i.material_name}-${i.location || 'null'}` === groupKey);
+      if (!item) {
+        console.error("Update target not found for groupKey:", groupKey);
+        alert("更新対象が見つかりません");
+        return;
+      }
+      const project_id = parseInt(document.getElementById("editInventoryProjectSelect").value);
+      const material_name = document.getElementById("editInventoryMaterialSelect").value;
+      const quantity = parseInt(document.getElementById("editInventoryQuantity").value);
+      const location = document.getElementById("editInventoryLocation").value.trim();
+      const updated_by = document.getElementById("editInventoryUpdatedBySelect").value || currentUser;
+
+      try {
+        console.log("Deleting old records:", item.ids);
+        for (const id of item.ids) {
+          const res = await fetch(API_BASE + "inventory/" + id, {
+            method: "DELETE",
+            headers: { "Authorization": "Bearer " + authToken }
+          });
+          if (!res.ok) throw new Error(`削除に失敗しました (ID: ${id}): ` + await res.text());
+        }
+        const payload = { project_id, material_name, quantity, location: location || null, updated_by };
+        console.log("Adding new record:", payload);
+        const postRes = await fetch(API_BASE + "inventory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
+          body: JSON.stringify(payload)
+        });
+        if (!postRes.ok) throw new Error("在庫登録に失敗しました: " + await postRes.text());
+        const created = await postRes.json();
+        console.log("Updated inventory:", created);
+        alert("在庫情報更新完了");
+        await loadInventory();
+        const modalEl = document.getElementById("editInventoryModal");
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.hide();
+        document.getElementById("editInventoryForm").reset();
+        document.getElementById("editInventoryUpdatedBySelect").value = currentUser;
+      } catch (err) {
+        console.error("Update inventory error:", err);
+        alert(err.message);
+      }
+    }
+
+    async function deleteInventory(groupKey) {
+      const item = currentFilteredInventory.find(i => `${i.project_id}-${i.material_name}-${i.location || 'null'}` === groupKey);
+      if (!item) {
+        console.error("Delete target not found for groupKey:", groupKey);
+        alert("削除対象が見つかりません");
+        return;
+      }
+      if (!confirm("この在庫を削除してよろしいですか？")) return;
+      try {
+        console.log("Deleting records:", item.ids);
+        for (const id of item.ids) {
+          const res = await fetch(API_BASE + "inventory/" + id, {
+            method: "DELETE",
+            headers: { "Authorization": "Bearer " + authToken }
+          });
+          if (!res.ok) throw new Error(`削除に失敗しました (ID: ${id}): ` + await res.text());
+        }
+        alert("在庫削除完了");
+        await loadInventory();
+      } catch (err) {
+        console.error("Delete inventory error:", err);
+        alert(err.message);
+      }
+    }
+
+    async function openHistoryModal(invId) {
+      try {
+        const res = await fetch(API_BASE + "inventory/" + invId + "/history", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) throw new Error("在庫履歴の取得に失敗しました: " + await res.text());
+        const history = await res.json();
+        console.log("History data:", history);
+        const tbody = document.querySelector("#historyTable tbody");
+        tbody.innerHTML = "";
+        history.forEach(record => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${record.updated_at ? new Date(record.updated_at).toLocaleString() : ""}</td>
+            <td>${record.updated_by || ""}</td>
+            <td>${record.change_data || ""}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        const modalEl = document.getElementById("historyModal");
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+      } catch (err) {
+        console.error("History fetch error:", err);
+        alert(err.message);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async function() {
+      document.getElementById("searchProject").addEventListener("input", filterInventory);
+      document.getElementById("searchMaterial").addEventListener("input", filterInventory);
+      document.getElementById("searchLocation").addEventListener("input", filterInventory);
+      document.getElementById("inventorySortSelect").addEventListener("change", sortInventory);
+      document.getElementById("addInventoryForm").addEventListener("submit", addInventory);
+      document.getElementById("editInventoryForm").addEventListener("submit", updateInventory);
+      try {
+        await Promise.all([fetchProjectsForInventorySelect(), loadEmployees(), loadRequiredMaterials()]);
+        await loadInventory();
+        loadCompanyInfo();
+      } catch (err) {
+        console.error("Initialization error:", err);
+        alert("初期化中にエラーが発生しました");
+      }
+    });
+  </script>
+</body>
+</html>

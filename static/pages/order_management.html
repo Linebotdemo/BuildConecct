@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>BuildConnect - 発注管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { background-color: #f8f9fa; }
+    #header { background-color: #343a40; color: #fff; padding: 10px 20px; }
+    #sidebar {
+      width: 240px;
+      background-color: #495057;
+      min-height: 100vh;
+      padding-top: 20px;
+    }
+    #sidebar .nav-link {
+      color: #fff;
+      margin-bottom: 1rem;
+      display: block;
+      padding: 5px 10px;
+      border-radius: 0.25rem;
+      text-decoration: none;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #sidebar .nav-link:hover,
+    #sidebar .nav-link.active {
+      background-color: #6c757d;
+    }
+    #main-content { margin-left: 240px; padding: 20px; }
+    table th, table td { vertical-align: middle; }
+    .pagination { margin-top: 20px; }
+    #orderSortSelect { width: 100%; }
+    #csvFilterForm .form-control { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3>BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+      <button class="btn btn-outline-light btn-sm" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+  <div class="d-flex">
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link" href="project_management.html">プロジェクト管理</a></li>
+        <li class="nav-item"><a class="nav-link active" href="order_management.html">発注管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="reports.html">施工報告</a></li>
+        <li class="nav-item"><a class="nav-link" href="schedule_management.html">スケジュール管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="inventory_management.html">資材在庫管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="registration.html">登録管理</a></li>
+      </ul>
+    </nav>
+    <div id="main-content" class="w-100">
+      <h2>発注管理</h2>
+      <div class="row g-2 mb-3">
+        <div class="col-md-2">
+          <input type="text" id="orderSearch" class="form-control" placeholder="注文番号/資材名/取引先検索">
+        </div>
+        <div class="col-md-2">
+          <select id="orderStatusFilter" class="form-select">
+            <option value="">状態(全て)</option>
+            <option value="ordered">発注済</option>
+            <option value="received">受領済</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <select id="orderSortSelect" class="form-select">
+            <option value="order_date_desc" selected>発注日 降順</option>
+            <option value="order_date_asc">発注日 昇順</option>
+            <option value="order_number_asc">注文番号 昇順</option>
+            <option value="order_number_desc">注文番号 降順</option>
+            <option value="project_asc">プロジェクト名 昇順</option>
+            <option value="project_desc">プロジェクト名 降順</option>
+            <option value="material_asc">資材名 昇順</option>
+            <option value="material_desc">資材名 降順</option>
+            <option value="storage_asc">保管場所 昇順</option>
+            <option value="storage_desc">保管場所 降順</option>
+            <option value="delivery_date_asc">納品日 昇順</option>
+            <option value="delivery_date_desc">納品日 降順</option>
+            <option value="status_asc">状態 昇順</option>
+            <option value="status_desc">状態 降順</option>
+          </select>
+        </div>
+        <div class="col-md-2 text-end">
+          <button class="btn btn-success" id="csvExportBtn">
+            <i class="fas fa-file-csv"></i> CSV出力
+          </button>
+        </div>
+        <div class="col-md-2 text-end">
+          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addOrderModal">
+            <i class="fas fa-plus"></i> 新規発注
+          </button>
+        </div>
+      </div>
+      <table class="table table-striped" id="orderTable">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>注文番号</th>
+            <th>プロジェクト名</th>
+            <th>資材名</th>
+            <th>取引先</th>
+            <th>保管場所</th>
+            <th>数量</th>
+            <th>単価</th>
+            <th>合計金額</th>
+            <th>発注日</th>
+            <th>納品日</th>
+            <th>状態</th>
+            <th>更新者</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <nav>
+        <ul class="pagination" id="pagination"></ul>
+      </nav>
+      
+      <!-- CSV出力条件モーダル -->
+      <div class="modal fade" id="csvFilterModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="csvFilterForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">CSV出力条件</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="閉じる" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="csvProject" class="form-label">プロジェクト名</label>
+                <select id="csvProject" class="form-select">
+                  <option value="">すべて</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="csvDateField" class="form-label">日付フィールド</label>
+                <select id="csvDateField" class="form-select">
+                  <option value="order_date">発注日</option>
+                  <option value="delivery_date">受領日</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="csvStartDate" class="form-label">開始日</label>
+                <input type="date" id="csvStartDate" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label for="csvEndDate" class="form-label">終了日</label>
+                <input type="date" id="csvEndDate" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label for="csvMaterial" class="form-label">資材名</label>
+                <input type="text" id="csvMaterial" class="form-control" placeholder="資材名(部分一致)">
+              </div>
+              <div class="mb-3">
+                <label for="csvSupplier" class="form-label">取引先</label>
+                <input type="text" id="csvSupplier" class="form-control" placeholder="取引先(部分一致)">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">キャンセル</button>
+              <button type="submit" class="btn btn-primary">出力</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- 新規発注モーダル -->
+      <div class="modal fade" id="addOrderModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="addOrderForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">新規発注</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="キャンセル" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="orderProjectSelect" class="form-label">プロジェクト</label>
+                <select id="orderProjectSelect" class="form-select" required></select>
+              </div>
+              <div class="mb-3">
+                <label for="orderMaterialSelect" class="form-label">資材名</label>
+                <select id="orderMaterialSelect" class="form-select" required></select>
+              </div>
+              <div class="mb-3">
+                <label for="orderUnitPrice" class="form-label">単価</label>
+                <input type="number" class="form-control" id="orderUnitPrice" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="orderSupplier" class="form-label">取引先</label>
+                <input type="text" class="form-control" id="orderSupplier" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="orderQuantity" class="form-label">数量</label>
+                <input type="number" class="form-control" id="orderQuantity" required value="1">
+              </div>
+              <div class="mb-3">
+                <label for="orderTotalPrice" class="form-label">合計金額</label>
+                <input type="number" class="form-control" id="orderTotalPrice" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="orderStorage" class="form-label">保管場所</label>
+                <input type="text" class="form-control" id="orderStorage">
+              </div>
+              <div class="mb-3">
+                <label for="orderDate" class="form-label">発注日</label>
+                <input type="date" class="form-control" id="orderDate">
+              </div>
+              <div class="mb-3">
+                <label for="deliveryDate" class="form-label">納品日</label>
+                <input type="date" class="form-control" id="deliveryDate"> <!-- 修正箇所 -->
+              </div>
+              <div class="mb-3">
+                <label for="orderPerson" class="form-label">担当者名</label>
+                <input type="text" class="form-control" id="orderPerson" placeholder="入力してください" list="personSuggestions">
+                <datalist id="personSuggestions"></datalist>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">キャンセル</button>
+              <button type="submit" class="btn btn-primary">登録</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- 発注編集モーダル -->
+      <div class="modal fade" id="editOrderModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+          <form id="editOrderForm" class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">発注情報編集</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="キャンセル" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <input type="hidden" id="editOrderId">
+              <div class="mb-3">
+                <label for="editOrderProjectSelect" class="form-label">プロジェクト</label>
+                <select id="editOrderProjectSelect" class="form-select" required></select>
+              </div>
+              <div class="mb-3">
+                <label for="editOrderMaterialSelect" class="form-label">資材名</label>
+                <select id="editOrderMaterialSelect" class="form-select" required></select>
+              </div>
+              <div class="mb-3">
+                <label for="editOrderUnitPrice" class="form-label">単価</label>
+                <input type="number" class="form-control" id="editOrderUnitPrice" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="editOrderSupplier" class="form-label">取引先</label>
+                <input type="text" class="form-control" id="editOrderSupplier" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="editOrderQuantity" class="form-label">数量</label>
+                <input type="number" class="form-control" id="editOrderQuantity" required>
+              </div>
+              <div class="mb-3">
+                <label for="editOrderTotalPrice" class="form-label">合計金額</label>
+                <input type="number" class="form-control" id="editOrderTotalPrice" readonly>
+              </div>
+              <div class="mb-3">
+                <label for="editOrderStorage" class="form-label">保管場所</label>
+                <input type="text" class="form-control" id="editOrderStorage">
+              </div>
+              <div class="mb-3">
+                <label for="editOrderDate" class="form-label">発注日</label>
+                <input type="date" class="form-control" id="editOrderDate">
+              </div>
+              <div class="mb-3">
+                <label for="editDeliveryDate" class="form-label">納品日</label>
+                <input type="date" class="form-control" id="editDeliveryDate">
+              </div>
+              <div class="mb-3">
+                <label for="editOrderPerson" class="form-label">担当者名</label>
+                <input type="text" class="form-control" id="editOrderPerson" placeholder="入力してください" list="editPersonSuggestions">
+                <datalist id="editPersonSuggestions"></datalist>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">キャンセル</button>
+              <button type="submit" class="btn btn-primary">更新</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- 発注履歴モーダル -->
+      <div class="modal fade" id="orderHistoryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">発注履歴</h5>
+              <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="閉じる" onclick="this.blur();"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table table-bordered" id="historyTable">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>アクション</th>
+                    <th>詳細</th>
+                    <th>日時</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="this.blur();">閉じる</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const API_BASE = "/";
+    const authToken = localStorage.getItem("authToken") || "";
+    let projectMap = {};
+    let allOrders = [];
+    let materials = [];
+    let employeeData = [];
+    const rowsPerPage = 10;
+    let currentPage = 1;
+    let orderFromOrderManagement = null;
+    let isUpdating = false;
+
+    function parseOrderInfo() {
+      const params = new URLSearchParams(window.location.search);
+      const order_id = params.get("order_id");
+      const supplier_name = params.get("supplier_name");
+      if (order_id && supplier_name) {
+        orderFromOrderManagement = { order_id, supplier_name };
+        console.log("[DEBUG] URLからorderFromOrderManagement:", orderFromOrderManagement);
+      } else {
+        const stored = localStorage.getItem("orderFromOrderManagement");
+        if (stored) {
+          try {
+            orderFromOrderManagement = JSON.parse(stored);
+            console.log("[DEBUG] localStorageからorderFromOrderManagement:", orderFromOrderManagement);
+            localStorage.removeItem("orderFromOrderManagement");
+          } catch (e) {
+            console.error("[DEBUG] orderFromOrderManagementのパースエラー:", e);
+          }
+        } else {
+          console.log("[DEBUG] orderFromOrderManagementは設定されていません");
+        }
+      }
+    }
+    parseOrderInfo();
+    
+    document.querySelectorAll('.modal').forEach(modalEl => {
+      modalEl.addEventListener('hidden.bs.modal', function () {
+        document.activeElement.blur();
+      });
+    });
+    
+    document.addEventListener("DOMContentLoaded", async function(){
+      console.log("[DEBUG] DOM fully loaded, starting initialization...");
+      document.getElementById("csvExportBtn").addEventListener("click", () => {
+        console.log("[DEBUG] CSV Export button clicked");
+        new bootstrap.Modal(document.getElementById("csvFilterModal")).show();
+      });
+      document.getElementById("csvFilterForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+        console.log("[DEBUG] CSV Filter form submitted");
+        exportCSV();
+        bootstrap.Modal.getInstance(document.getElementById("csvFilterModal")).hide();
+      });
+      document.getElementById("orderSearch").addEventListener("input", sortOrders);
+      document.getElementById("orderStatusFilter").addEventListener("change", sortOrders);
+      document.getElementById("orderSortSelect").addEventListener("change", sortOrders);
+      document.getElementById("addOrderForm").addEventListener("submit", addOrder);
+      document.getElementById("editOrderForm").addEventListener("submit", updateOrder);
+      document.getElementById("logoutBtn").addEventListener("click", () => {
+        console.log("[DEBUG] Logout button clicked");
+        localStorage.removeItem("authToken");
+        window.location.href = "admin_login.html";
+      });
+      document.getElementById("orderMaterialSelect").addEventListener("change", handleMaterialChange);
+      document.getElementById("orderQuantity").addEventListener("input", updateTotalPrice);
+      document.getElementById("editOrderMaterialSelect").addEventListener("change", function() {
+        const matId = parseInt(this.value);
+        const mat = materials.find(m => m.id === matId);
+        const unitPriceInput = document.getElementById("editOrderUnitPrice");
+        const supplierInput = document.getElementById("editOrderSupplier");
+        console.log("[DEBUG] Edit material changed, matId:", matId, ", mat:", mat);
+        if(mat){
+          unitPriceInput.value = mat.price;
+          supplierInput.value = mat.supplier_name;
+        } else {
+          unitPriceInput.value = "";
+          supplierInput.value = "";
+        }
+        updateEditTotalPrice();
+      });
+      document.getElementById("editOrderQuantity").addEventListener("input", updateEditTotalPrice);
+    
+      try {
+        await Promise.all([
+          fetchProjectsForOrderSelect(),
+          loadMaterialList(),
+          loadEmployees()
+        ]);
+        console.log("[DEBUG] Dependencies loaded, fetching orders...");
+        await loadOrders();
+        setDefaultOrderDate();
+        loadCompanyInfo();
+      } catch (err) {
+        console.error("[DEBUG] Initialization error:", err);
+        alert("初期化中にエラーが発生しました: " + err.message);
+      }
+    });
+    
+    function parseJwt(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("[DEBUG] JWT解析エラー:", e);
+        return null;
+      }
+    }
+    
+    function loadCompanyInfo() {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      const payload = parseJwt(token);
+      console.log("[DEBUG] JWT payload:", payload);
+      if (payload) {
+        document.getElementById("userInfo").textContent = `${payload.sub} (${payload.company_code || "No Code"})`;
+      }
+    }
+    
+    async function fetchProjectsForOrderSelect() {
+      console.log("[DEBUG] fetchProjectsForOrderSelect() 開始");
+      try {
+        const res = await fetch(API_BASE + "projects", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) throw new Error("プロジェクト一覧の取得に失敗しました: " + await res.text());
+        const projects = await res.json();
+        console.log("[DEBUG] Projects from API:", projects);
+        const orderProjSelect = document.getElementById("orderProjectSelect");
+        const editProjSelect = document.getElementById("editOrderProjectSelect");
+        const csvProjectSelect = document.getElementById("csvProject");
+        orderProjSelect.innerHTML = "";
+        editProjSelect.innerHTML = "";
+        csvProjectSelect.innerHTML = `<option value="">すべて</option>`;
+        projectMap = {};
+        projects.forEach(proj => {
+          projectMap[proj.id] = proj.name;
+          const option = document.createElement("option");
+          option.value = proj.id;
+          option.textContent = proj.name;
+          orderProjSelect.appendChild(option.cloneNode(true));
+          editProjSelect.appendChild(option.cloneNode(true));
+          const csvOption = document.createElement("option");
+          csvOption.value = proj.id;
+          csvOption.textContent = proj.name;
+          csvProjectSelect.appendChild(csvOption);
+        });
+        console.log("[DEBUG] Projects loaded:", projectMap);
+      } catch (err) {
+        console.error("[DEBUG] fetchProjectsForOrderSelect error:", err);
+        alert(err.message);
+      }
+    }
+    
+    async function loadEmployees() {
+      console.log("[DEBUG] loadEmployees() 開始");
+      try {
+        const response = await fetch(API_BASE + "registration/employees", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!response.ok) throw new Error("従業員データの取得に失敗しました: " + await response.text());
+        employeeData = await response.json();
+        console.log("[DEBUG] Employees from API:", employeeData);
+        updateEmployeeDatalist("personSuggestions", employeeData);
+        updateEmployeeDatalist("editPersonSuggestions", employeeData);
+        console.log("[DEBUG] Employees loaded:", employeeData);
+      } catch (error) {
+        console.error("[DEBUG] loadEmployees error:", error);
+        alert(error.message);
+      }
+    }
+    
+    function updateEmployeeDatalist(elementId, employees) {
+      const datalist = document.getElementById(elementId);
+      if (!datalist) return;
+      datalist.innerHTML = "";
+      employees.forEach(emp => {
+        const option = document.createElement("option");
+        option.value = emp.name;
+        datalist.appendChild(option);
+      });
+      console.log(`[DEBUG] Employee datalist updated for ${elementId}`);
+    }
+    
+    async function loadMaterialList() {
+      console.log("[DEBUG] loadMaterialList() 開始");
+      try {
+        const res = await fetch(API_BASE + "registration/materials", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) throw new Error("資材一覧の取得に失敗しました: " + await res.text());
+        materials = await res.json();
+        console.log("[DEBUG] Materials from API:", materials);
+        const materialSelect = document.getElementById("orderMaterialSelect");
+        const editMatSelect = document.getElementById("editOrderMaterialSelect");
+        materialSelect.innerHTML = "<option value=''>選択してください</option>";
+        editMatSelect.innerHTML = "<option value=''>選択してください</option>";
+        materials.forEach(mat => {
+          const opt = document.createElement("option");
+          opt.value = mat.id;
+          opt.textContent = `${mat.name} (${mat.supplier_name})`;
+          materialSelect.appendChild(opt.cloneNode(true));
+          editMatSelect.appendChild(opt);
+        });
+        if(materialSelect.value) {
+          handleMaterialChange();
+        }
+        console.log("[DEBUG] Materials loaded:", materials);
+      } catch (err) {
+        console.error("[DEBUG] loadMaterialList error:", err);
+        alert(err.message);
+      }
+    }
+    
+    function handleMaterialChange() {
+      console.log("[DEBUG] handleMaterialChange() 実行");
+      const materialSelect = document.getElementById("orderMaterialSelect");
+      if(!materialSelect.value) {
+        console.log("[DEBUG] orderMaterialSelect の value が未設定のため処理をスキップ");
+        return;
+      }
+      const materialId = parseInt(materialSelect.value);
+      console.log("[DEBUG] 選択された資材ID:", materialId);
+      const mat = materials.find(m => m.id === materialId);
+      console.log("[DEBUG] 見つかった資材:", mat);
+      const unitPriceInput = document.getElementById("orderUnitPrice");
+      const supplierInput = document.getElementById("orderSupplier");
+      if(mat){
+        unitPriceInput.value = mat.price;
+        supplierInput.value = mat.supplier_name;
+      } else {
+        unitPriceInput.value = "";
+        supplierInput.value = "";
+      }
+      updateTotalPrice();
+    }
+    
+    function updateTotalPrice() {
+      const unitPrice = parseFloat(document.getElementById("orderUnitPrice").value) || 0;
+      const quantity = parseInt(document.getElementById("orderQuantity").value) || 0;
+      const total = unitPrice * quantity;
+      console.log("[DEBUG] updateTotalPrice(): unitPrice=", unitPrice, " quantity=", quantity, " total=", total);
+      document.getElementById("orderTotalPrice").value = total;
+    }
+    
+    function setDefaultOrderDate() {
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = ("0" + (today.getMonth() + 1)).slice(-2);
+      const dd = ("0" + today.getDate()).slice(-2);
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const orderDateInput = document.getElementById("orderDate");
+      if (orderDateInput) orderDateInput.value = dateStr;
+      console.log("[DEBUG] setDefaultOrderDate():", dateStr);
+    }
+    
+    async function addOrder(e) {
+      e.preventDefault();
+      console.log("[DEBUG] addOrder() 開始");
+      const project_id = parseInt(document.getElementById("orderProjectSelect").value);
+      const materialId = parseInt(document.getElementById("orderMaterialSelect").value);
+      const mat = materials.find(m => m.id === materialId);
+      const materialName = mat ? mat.name : "不明資材";
+      const supplierName = mat ? mat.supplier_name : "不明取引先";
+      const unitPrice = mat ? mat.price : 0;
+      const storage = document.getElementById("orderStorage").value;
+      const quantity = parseInt(document.getElementById("orderQuantity").value);
+      const orderDate = document.getElementById("orderDate").value;
+      const deliveryDate = document.getElementById("deliveryDate").value;
+      const totalPrice = unitPrice * quantity;
+      const person = document.getElementById("orderPerson").value.trim();
+      console.log("[DEBUG] addOrder() 入力内容:", { project_id, materialName, supplierName, unitPrice, storage, quantity, orderDate, deliveryDate, totalPrice, person });
+      const updated_by = person;
+      const orderData = {
+        project_id,
+        material: materialName,
+        supplier_name: supplierName,
+        price: unitPrice,
+        total_price: totalPrice,
+        storage: storage || null,
+        order_date: orderDate,
+        delivery_date: deliveryDate || null,
+        quantity: quantity,
+        order_status: "ordered",
+        updated_by: updated_by
+      };
+    
+      try {
+        const res = await fetch(API_BASE + "orders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(orderData)
+        });
+        console.log("[DEBUG] addOrder() POST /orders レスポンスステータス:", res.status);
+        if (!res.ok) throw new Error("発注登録に失敗しました: " + await res.text());
+        const created = await res.json();
+        console.log("[DEBUG] 発注登録レスポンス:", created);
+        await logHistory("発注登録", `発注ID: ${created.id}, 担当者: ${updated_by}`);
+        alert("発注登録完了! ID:" + created.id);
+        await loadOrders();
+        
+        const addOrderModalEl = document.getElementById("addOrderModal");
+        bootstrap.Modal.getInstance(document.getElementById("addOrderModal")).hide();
+        document.getElementById("addOrderForm").reset();
+        setDefaultOrderDate();
+        
+        document.getElementById("addOrderForm").reset();
+        setDefaultOrderDate();
+      } catch (err) {
+        console.error("[DEBUG] addOrder() エラー:", err);
+        alert(err.message);
+      }
+    }
+    
+    async function updateOrderStatus(id, newStatus) {
+      if (isUpdating) {
+        console.log("[DEBUG] updateOrderStatus already in progress, skipping...");
+        return;
+      }
+      isUpdating = true;
+      console.log(`[DEBUG] updateOrderStatus called with id=${id}, newStatus=${newStatus}, timestamp=${new Date().toISOString()}`);
+      const order = allOrders.find(o => o.id === id);
+      if (!order) {
+        alert("発注が見つかりません");
+        isUpdating = false;
+        return;
+      }
+      if (order.order_status === "received") {
+        alert("すでに受領済みです");
+        isUpdating = false;
+        return;
+      }
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = ("0" + (today.getMonth() + 1)).slice(-2);
+      const dd = ("0" + today.getDate()).slice(-2);
+      const deliveryDate = `${yyyy}-${mm}-${dd}`;
+    
+      const updatedOrder = {
+        ...order,
+        order_status: newStatus,
+        delivery_date: deliveryDate,
+        updated_by: order.updated_by
+      };
+    
+      try {
+        console.log("[DEBUG] Sending PUT /orders/", id);
+        const updateResponse = await fetch(API_BASE + "orders/" + id, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(updatedOrder)
+        });
+        console.log("[DEBUG] updateOrderStatus() PUT /orders レスポンスステータス:", updateResponse.status);
+        if (!updateResponse.ok) {
+          const errorText = await updateResponse.text();
+          throw new Error("発注ステータス更新に失敗しました: " + errorText);
+        }
+        if (newStatus === "received") {
+          const inventoryData = {
+            project_id: order.project_id,
+            material_name: order.material,
+            quantity: order.quantity,
+            location: order.storage || null,
+            updated_by: order.updated_by
+          };
+          console.log("[DEBUG] updateOrderStatus() Sending inventory POST request:", inventoryData, "timestamp=", new Date().toISOString());
+          const inventoryResponse = await fetch(API_BASE + "inventory", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + authToken
+            },
+            body: JSON.stringify(inventoryData)
+          });
+          console.log("[DEBUG] updateOrderStatus() 在庫登録レスポンスステータス:", inventoryResponse.status);
+          if (!inventoryResponse.ok) {
+            const errorText = await inventoryResponse.text();
+            throw new Error("在庫登録に失敗しました: " + errorText);
+          }
+          const createdInventory = await inventoryResponse.json();
+          console.log("[DEBUG] Inventory registered:", createdInventory);
+          await logHistory("在庫登録", `発注ID: ${order.order_number}, 在庫ID: ${createdInventory.id}, 担当者: ${order.updated_by}`);
+        }
+        await logHistory("発注ステータス更新", `発注ID: ${order.order_number}, 状態: ${newStatus}, 担当者: ${order.updated_by || "未設定"}`);
+        alert("発注ステータスを更新しました");
+        await loadOrders();
+      } catch (err) {
+        console.error("[DEBUG] updateOrderStatus() エラー:", err);
+        alert(err.message);
+      } finally {
+        isUpdating = false;
+        console.log("[DEBUG] updateOrderStatus completed, isUpdating reset to false");
+      }
+    }
+    
+    function openEditOrderModal(orderId) {
+      console.log("[DEBUG] openEditOrderModal() orderId:", orderId);
+      const order = allOrders.find(o => o.id === orderId);
+      if (!order) {
+        alert("編集対象の発注が見つかりません");
+        return;
+      }
+      document.getElementById("editOrderId").value = order.id;
+      const editProjSelect = document.getElementById("editOrderProjectSelect");
+      editProjSelect.value = order.project_id;
+      const editMatSelect = document.getElementById("editOrderMaterialSelect");
+      const selectedMat = materials.find(m => m.name === order.material);
+      editMatSelect.value = selectedMat ? selectedMat.id : "";
+      const editUnitPrice = document.getElementById("editOrderUnitPrice");
+      const editSupplier = document.getElementById("editOrderSupplier");
+      if (selectedMat) {
+        editUnitPrice.value = selectedMat.price;
+        editSupplier.value = selectedMat.supplier_name;
+      } else {
+        editUnitPrice.value = order.price || "";
+        editSupplier.value = order.supplier_name || "";
+      }
+      document.getElementById("editOrderQuantity").value = order.quantity;
+      document.getElementById("editOrderDate").value = order.order_date || "";
+      document.getElementById("editDeliveryDate").value = order.delivery_date || "";
+      document.getElementById("editOrderStorage").value = order.storage || "";
+      document.getElementById("editOrderPerson").value = order.updated_by || "";
+      console.log("[DEBUG] openEditOrderModal() order:", order);
+      updateEditTotalPrice();
+      new bootstrap.Modal(document.getElementById("editOrderModal")).show();
+    }
+    
+    function updateEditTotalPrice() {
+      const unitPrice = parseFloat(document.getElementById("editOrderUnitPrice").value) || 0;
+      const quantity = parseInt(document.getElementById("editOrderQuantity").value) || 0;
+      const total = unitPrice * quantity;
+      console.log("[DEBUG] updateEditTotalPrice() 計算:", { unitPrice, quantity, total });
+      document.getElementById("editOrderTotalPrice").value = total;
+    }
+    
+    async function updateOrder(e) {
+      e.preventDefault();
+      const orderId = parseInt(document.getElementById("editOrderId").value);
+      const project_id = parseInt(document.getElementById("editOrderProjectSelect").value);
+      const materialId = parseInt(document.getElementById("editOrderMaterialSelect").value);
+      const mat = materials.find(m => m.id === materialId);
+      const materialName = mat ? mat.name : "不明資材";
+      const supplierName = mat ? mat.supplier_name : "不明取引先";
+      const unitPrice = mat ? mat.price : 0;
+      const storage = document.getElementById("editOrderStorage").value;
+      const quantity = parseInt(document.getElementById("editOrderQuantity").value);
+      const orderDate = document.getElementById("editOrderDate").value;
+      const deliveryDate = document.getElementById("editDeliveryDate").value;
+      const totalPrice = unitPrice * quantity;
+      const person = document.getElementById("editOrderPerson").value.trim();
+      console.log("[DEBUG] updateOrder() 入力内容:", { orderId, project_id, materialName, supplierName, unitPrice, storage, quantity, orderDate, deliveryDate, totalPrice, person });
+    
+      const orderData = {
+        project_id,
+        material: materialName,
+        supplier_name: supplierName,
+        price: unitPrice,
+        total_price: totalPrice,
+        storage: storage || null,
+        order_date: orderDate,
+        delivery_date: deliveryDate || null,
+        quantity: quantity,
+        order_status: "ordered",
+        updated_by: person || null
+      };
+    
+      try {
+        const res = await fetch(API_BASE + "orders/" + orderId, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(orderData)
+        });
+        console.log("[DEBUG] updateOrder() PUT /orders レスポンスステータス:", res.status);
+        if (!res.ok) throw new Error("発注更新に失敗しました: " + await res.text());
+        await logHistory("発注更新", `発注ID: ${orderData.order_number || orderId}, 担当者: ${person || "未設定"}`);
+        alert("発注情報更新完了");
+        await loadOrders();
+        
+        const editModalEl = document.getElementById("editOrderModal");
+        let editModalInstance = bootstrap.Modal.getInstance(editModalEl);
+        if (!editModalInstance) {
+          editModalInstance = new bootstrap.Modal(editModalEl);
+        }
+        editModalInstance.hide();
+        
+        setTimeout(() => {
+          editModalInstance.dispose();
+          document.querySelectorAll('.modal-backdrop').forEach(bd => bd.remove());
+          document.body.classList.remove('modal-open');
+          document.body.style.removeProperty('padding-right');
+        }, 300);
+        
+        document.getElementById("editOrderForm").reset();
+      } catch (err) {
+        console.error("[DEBUG] updateOrder() エラー:", err);
+        alert(err.message);
+      }
+    }
+    
+    async function logHistory(action, details) {
+      const historyData = {
+        id: null,
+        action: action,
+        details: details,
+        timestamp: new Date().toISOString()
+      };
+      console.log("[DEBUG] logHistory() 送信データ:", historyData);
+      try {
+        const res = await fetch(API_BASE + "history", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + authToken
+          },
+          body: JSON.stringify(historyData)
+        });
+        console.log("[DEBUG] logHistory() レスポンスステータス:", res.status);
+        if (!res.ok) {
+          if (res.status === 404) {
+            console.warn("[DEBUG] 履歴エンドポイントが存在しません。サーバー側を確認してください。");
+          } else {
+            throw new Error("履歴登録に失敗しました: " + await res.text());
+          }
+        } else {
+          console.log("[DEBUG] History logged:", historyData);
+        }
+      } catch (err) {
+        console.error("[DEBUG] logHistory() エラー:", err);
+      }
+    }
+    
+    function exportCSV() {
+      const csvProject = document.getElementById("csvProject").value;
+      const csvDateField = document.getElementById("csvDateField").value;
+      const csvStartDate = document.getElementById("csvStartDate").value;
+      const csvEndDate = document.getElementById("csvEndDate").value;
+      const csvMaterial = document.getElementById("csvMaterial").value.trim().toLowerCase();
+      const csvSupplier = document.getElementById("csvSupplier").value.trim().toLowerCase();
+    
+      let csvLines = [];
+      csvLines.push('"プロジェクト名","注文番号","資材名","取引先","数量","単価","合計金額","発注日","納品日","状態","更新者"');
+    
+      let filtered = [...allOrders];
+      if (csvProject) {
+        filtered = filtered.filter(o => o.project_id == csvProject);
+      }
+      if (csvDateField && csvStartDate && csvEndDate) {
+        filtered = filtered.filter(o => {
+          const dateFieldValue = (csvDateField === "order_date") ? o.order_date : o.delivery_date;
+          return dateFieldValue && dateFieldValue >= csvStartDate && dateFieldValue <= csvEndDate;
+        });
+      }
+      if (csvMaterial) {
+        filtered = filtered.filter(o => o.material.toLowerCase().includes(csvMaterial));
+      }
+      if (csvSupplier) {
+        filtered = filtered.filter(o => (o.supplier_name || "").toLowerCase().includes(csvSupplier));
+      }
+    
+      filtered.forEach(o => {
+        const projName = o.project_name || projectMap[o.project_id] || "";
+        const orderNumber = o.order_number || "-";
+        const materialName = o.material || "";
+        const supplierName = o.supplier_name || "";
+        const quantity = o.quantity || 0;
+        const price = o.price || 0;
+        const total = o.total_price || (price * quantity);
+        const orderDateYmd = o.order_date ? o.order_date.replace(/-/g, "/") : "";
+        const deliveryDateYmd = o.delivery_date ? o.delivery_date.replace(/-/g, "/") : "";
+        const statusText = getOrderStatusText(o.order_status);
+        const updatedBy = o.updated_by || "未設定";
+    
+        const line = `"${projName.replace(/"/g, '""')}","${orderNumber.replace(/"/g, '""')}","${materialName.replace(/"/g, '""')}","${supplierName.replace(/"/g, '""')}",` +
+                     `"${quantity}","${price}","${total}","${orderDateYmd}","${deliveryDateYmd}","${statusText.replace(/"/g, '""')}","${updatedBy.replace(/"/g, '""')}"`;
+        csvLines.push(line);
+      });
+    
+      const csvData = csvLines.join("\n");
+      const csvFile = new Blob([csvData], { type: "text/csv" });
+      const downloadLink = document.createElement("a");
+      downloadLink.download = "orders.csv";
+      downloadLink.href = window.URL.createObjectURL(csvFile);
+      downloadLink.style.display = "none";
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      document.body.removeChild(downloadLink);
+    }
+    
+    async function openOrderHistoryModal(orderId) {
+      console.log("[DEBUG] openOrderHistoryModal() orderId:", orderId);
+      const order = allOrders.find(o => o.id === orderId);
+      if (!order) {
+        alert("該当する発注が見つかりません");
+        return;
+      }
+      try {
+        const res = await fetch(API_BASE + "order_history?order_number=" + encodeURIComponent(order.order_number), { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error("発注履歴の取得に失敗しました: " + errorText);
+        }
+        const history = await res.json();
+        console.log("[DEBUG] Order history received:", history);
+        const tbody = document.querySelector("#historyTable tbody");
+        tbody.innerHTML = "";
+        if (history.length === 0) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td colspan="4" class="text-center">履歴が見つかりません</td>`;
+          tbody.appendChild(tr);
+        } else {
+          history.forEach(record => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${record.id}</td>
+              <td>${record.action}</td>
+              <td>${record.details}</td>
+              <td>${new Date(record.timestamp).toLocaleString()}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        new bootstrap.Modal(document.getElementById("orderHistoryModal")).show();
+      } catch (err) {
+        console.error("[DEBUG] openOrderHistoryModal() エラー:", err);
+        alert(err.message);
+      }
+    }
+    
+    function getOrderStatusColor(status){
+      switch(status){
+        case "ordered":
+          return "warning text-dark";
+        case "received":
+          return "success";
+        default:
+          return "secondary";
+      }
+    }
+    
+    function getOrderStatusText(status) {
+      switch(status) {
+        case "ordered":
+          return "発注済";
+        case "received":
+          return "受領済";
+        default:
+          return "";
+      }
+    }
+    
+    function sortOrders(){
+      console.log("[DEBUG] sortOrders() called");
+      const sortCriteria = document.getElementById("orderSortSelect").value;
+      const statusFilter = document.getElementById("orderStatusFilter").value;
+      let sortedOrders = [...allOrders];
+      if (statusFilter) {
+        sortedOrders = sortedOrders.filter(o => o.order_status === statusFilter);
+      }
+      sortedOrders.sort((a, b) => b.id - a.id);
+      
+      if(sortCriteria === "order_number_asc"){
+        sortedOrders.sort((a, b) => (a.order_number || "").localeCompare(b.order_number || ""));
+      } else if(sortCriteria === "order_number_desc"){
+        sortedOrders.sort((a, b) => (b.order_number || "").localeCompare(a.order_number || ""));
+      } else if(sortCriteria === "project_asc"){
+        sortedOrders.sort((a, b) => {
+          const aName = a.project_name || projectMap[a.project_id] || "";
+          const bName = b.project_name || projectMap[b.project_id] || "";
+          return aName.localeCompare(bName);
+        });
+      } else if(sortCriteria === "project_desc"){
+        sortedOrders.sort((a, b) => {
+          const aName = a.project_name || projectMap[a.project_id] || "";
+          const bName = b.project_name || projectMap[b.project_id] || "";
+          return bName.localeCompare(aName);
+        });
+      } else if(sortCriteria === "material_asc"){
+        sortedOrders.sort((a, b) => a.material.localeCompare(b.material));
+      } else if(sortCriteria === "material_desc"){
+        sortedOrders.sort((a, b) => b.material.localeCompare(a.material));
+      } else if(sortCriteria === "storage_asc"){
+        sortedOrders.sort((a, b) => (a.storage || "").localeCompare(b.storage || ""));
+      } else if(sortCriteria === "storage_desc"){
+        sortedOrders.sort((a, b) => (b.storage || "").localeCompare(a.storage || ""));
+      } else if(sortCriteria === "order_date_asc"){
+        sortedOrders.sort((a, b) => new Date(a.order_date) - new Date(b.order_date));
+      } else if(sortCriteria === "order_date_desc"){
+        sortedOrders.sort((a, b) => new Date(b.order_date) - new Date(a.order_date));
+      } else if(sortCriteria === "delivery_date_asc"){
+        sortedOrders.sort((a, b) => new Date(a.delivery_date) - new Date(b.delivery_date));
+      } else if(sortCriteria === "delivery_date_desc"){
+        sortedOrders.sort((a, b) => new Date(b.delivery_date) - new Date(a.delivery_date));
+      } else if(sortCriteria === "status_asc"){
+        sortedOrders.sort((a, b) => a.order_status.localeCompare(b.order_status));
+      } else if(sortCriteria === "status_desc"){
+        sortedOrders.sort((a, b) => b.order_status.localeCompare(a.order_status));
+      }
+      const keyword = document.getElementById("orderSearch").value.toLowerCase().trim();
+      if(keyword){
+        sortedOrders = sortedOrders.filter(o => 
+          (o.order_number && o.order_number.toLowerCase().includes(keyword)) ||
+          (o.material && o.material.toLowerCase().includes(keyword)) ||
+          (o.supplier_name && o.supplier_name.toLowerCase().includes(keyword))
+        );
+      }
+      console.log("[DEBUG] sortOrders() sortedOrders:", sortedOrders);
+      renderOrderTable(sortedOrders);
+    }
+    
+    async function loadOrders() {
+      console.log("[DEBUG] loadOrders() 開始");
+      try {
+        console.log("[DEBUG] Fetching orders from:", API_BASE + "orders");
+        console.log("[DEBUG] Using token:", authToken);
+        const res = await fetch(API_BASE + "orders", { headers: { "Authorization": "Bearer " + authToken } });
+        if (!res.ok) {
+          const errorText = await res.text();
+          throw new Error("発注データの取得に失敗しました: " + errorText);
+        }
+        const data = await res.json();
+        console.log("[DEBUG] Orders received:", data);
+        allOrders = data;
+        currentPage = 1;
+        allOrders.sort((a, b) => b.id - a.id);
+        renderOrderTable(allOrders);
+      } catch (err) {
+        console.error("[DEBUG] loadOrders() エラー:", err);
+        alert(err.message);
+        allOrders = [];
+        renderOrderTable(allOrders);
+      }
+    }
+    
+    function renderOrderTable(orders){
+      console.log("[DEBUG] renderOrderTable() 開始, orders length:", orders.length);
+      const tbody = document.querySelector("#orderTable tbody");
+      tbody.innerHTML = "";
+      const start = (currentPage - 1) * rowsPerPage;
+      const pageData = orders.slice(start, start + rowsPerPage);
+      console.log("[DEBUG] Rendering orders, pageData length:", pageData.length, "start:", start);
+      
+      pageData.forEach(order => {
+        const projName = order.project_name || projectMap[order.project_id] || "";
+        const orderNumber = order.order_number || "-";
+        const supplierName = order.supplier_name || "";
+        const storage = order.storage || "-";
+        const price = order.price || 0;
+        const totalPrice = order.total_price || (price * (order.quantity || 0));
+        const orderDateStr = order.order_date ? order.order_date.replace(/-/g, "/") : "-";
+        const deliveryDateStr = order.delivery_date ? order.delivery_date.replace(/-/g, "/") : "-";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${order.id}</td>
+          <td>${order.order_number || "-"}</td>
+          <td>${projName}</td>
+          <td>${order.material}</td>
+          <td>${supplierName}</td>
+          <td>${storage}</td>
+          <td>${order.quantity}</td>
+          <td>${price}</td>
+          <td>${totalPrice}</td>
+          <td>${orderDateStr}</td>
+          <td>${deliveryDateStr}</td>
+          <td><span class="badge bg-${getOrderStatusColor(order.order_status)}">${getOrderStatusText(order.order_status)}</span></td>
+          <td>${order.updated_by || "未設定"}</td>
+          <td>
+            <button class="btn btn-sm btn-secondary me-1 receive-btn" data-order-id="${order.id}" ${order.order_status === 'received' ? 'disabled' : ''}>受領済</button>
+            <button class="btn btn-sm btn-outline-primary edit-btn" data-order-id="${order.id}">編集</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.querySelectorAll('.receive-btn').forEach(btn => {
+        btn.removeEventListener('click', handleReceiveClick);
+        btn.addEventListener('click', handleReceiveClick);
+        console.log("[DEBUG] Added event listener to receive-btn, orderId:", btn.getAttribute('data-order-id'));
+      });
+      document.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.removeEventListener('click', handleEditClick);
+        btn.addEventListener('click', handleEditClick);
+        console.log("[DEBUG] Added event listener to edit-btn, orderId:", btn.getAttribute('data-order-id'));
+      });
+
+      renderPagination(orders.length);
+    }
+
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+
+    const debouncedUpdateOrderStatus = debounce((orderId, status) => {
+      updateOrderStatus(orderId, status);
+    }, 300);
+
+    function handleReceiveClick(e) {
+      const btn = e.target;
+      const orderId = parseInt(btn.getAttribute('data-order-id'));
+      console.log("[DEBUG] handleReceiveClick triggered for orderId:", orderId, "timestamp=", new Date().toISOString());
+      btn.disabled = true;
+      debouncedUpdateOrderStatus(orderId, 'received');
+    }
+
+    function handleEditClick(e) {
+      const orderId = parseInt(e.target.getAttribute('data-order-id'));
+      console.log("[DEBUG] handleEditClick triggered for orderId:", orderId, "timestamp=", new Date().toISOString());
+      openEditOrderModal(orderId);
+    }
+    
+    function renderPagination(totalItems){
+      const totalPages = Math.ceil(totalItems / rowsPerPage);
+      const paginationUl = document.getElementById("pagination");
+      paginationUl.innerHTML = "";
+      for (let i = 1; i <= totalPages; i++){
+        const li = document.createElement("li");
+        li.className = "page-item" + (i === currentPage ? " active" : "");
+        const a = document.createElement("a");
+        a.className = "page-link";
+        a.href = "#";
+        a.innerText = i;
+        a.addEventListener("click", (e) => {
+          e.preventDefault();
+          currentPage = i;
+          sortOrders();
+        });
+        li.appendChild(a);
+        paginationUl.appendChild(li);
+      }
+    }
+  </script>
+</body>
+</html>

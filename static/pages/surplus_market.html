@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>余剰資材売買マーケット</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- FontAwesome (アイコン) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    #header {
+      background-color: #343a40;
+      color: #fff;
+      padding: 10px 20px;
+    }
+    .nav-link.active, .nav-link:hover {
+      background-color: #6c757d;
+      border-radius: 4px;
+    }
+    /* 余剰資材のカード */
+    #surplusList .card {
+      margin-bottom: 1rem;
+    }
+    .surplus-photo {
+      max-width: 150px;
+      max-height: 150px;
+      object-fit: cover;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <!-- ヘッダー -->
+  <header id="header" class="d-flex justify-content-between align-items-center bg-dark text-white p-3">
+    <h3>BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+      <button class="btn btn-outline-light btn-sm" id="logoutBtn">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+
+  <div class="container py-4">
+    <h1>余剰資材売買マーケット</h1>
+    <p>
+      ここでは出品された余剰資材を、全企業が共有・閲覧できます。<br>
+      <strong>購入申し込み</strong>ボタンは「投稿企業以外」のユーザーが表示できます。<br>
+      <strong>取引完了</strong>ボタンや<strong>削除</strong>ボタンは「投稿企業のみ」が表示して操作できます。
+    </p>
+
+    <!-- 検索フォーム -->
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <input type="text" id="searchInput" class="form-control" placeholder="資材名 / 会社名 / 担当者名 / 連絡先">
+      </div>
+      <div class="col-md-3">
+        <input type="text" id="searchLocationInput" class="form-control" placeholder="所在地(都道府県など)">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-secondary w-100" id="searchBtn">
+          <i class="fas fa-search"></i> 検索
+        </button>
+      </div>
+      <div class="col-md-4 text-end">
+        <!-- 出品フォームを開くボタン -->
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addSurplusModal">
+          <i class="fas fa-plus"></i> 出品フォーム
+        </button>
+      </div>
+    </div>
+
+    <!-- 余剰資材の一覧表示エリア -->
+    <div id="surplusList"></div>
+  </div>
+
+  <!-- 出品フォーム用モーダル -->
+  <div class="modal fade" id="addSurplusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="addSurplusForm" class="modal-content" enctype="multipart/form-data">
+        <div class="modal-header">
+          <h5 class="modal-title">余剰資材の出品</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- 出品者情報 -->
+          <div class="mb-3">
+            <label for="sellerCompany" class="form-label">会社名</label>
+            <input type="text" class="form-control" id="sellerCompany" placeholder="会社名" required>
+          </div>
+          <div class="mb-3">
+            <label for="sellerName" class="form-label">担当者名</label>
+            <input type="text" class="form-control" id="sellerName" placeholder="担当者のお名前" required>
+          </div>
+          <div class="mb-3">
+            <label for="sellerContact" class="form-label">連絡先 (メール or 電話番号)</label>
+            <input type="text" class="form-control" id="sellerContact" placeholder="メールアドレスや電話番号" required>
+          </div>
+          <!-- 資材情報 -->
+          <div class="mb-3">
+            <label for="surplusMaterial" class="form-label">資材名</label>
+            <input type="text" class="form-control" id="surplusMaterial" required>
+          </div>
+          <div class="mb-3">
+            <label for="surplusSize" class="form-label">サイズ</label>
+            <input type="text" class="form-control" id="surplusSize" placeholder="例: 長さ200cm × 幅50cm">
+          </div>
+          <div class="mb-3">
+            <label for="surplusType" class="form-label">材質</label>
+            <input type="text" class="form-control" id="surplusType" placeholder="例: 木材 / 金属 / プラスチックなど">
+          </div>
+          <div class="mb-3">
+            <label for="surplusPrice" class="form-label">希望価格</label>
+            <input type="number" step="0.1" class="form-control" id="surplusPrice" placeholder="金額を入力 (任意)">
+          </div>
+          <div class="mb-3">
+            <label for="surplusLocation" class="form-label">所在地 (都道府県など)</label>
+            <input type="text" class="form-control" id="surplusLocation" placeholder="例: 東京都 / 大阪府">
+          </div>
+          <div class="mb-3">
+            <label for="surplusRemarks" class="form-label">備考 (任意)</label>
+            <textarea class="form-control" id="surplusRemarks" rows="3" placeholder="自由記述"></textarea>
+          </div>
+          <!-- 画像アップロード -->
+          <div class="mb-3">
+            <label for="surplusPhoto" class="form-label">写真アップロード (任意)</label>
+            <input type="file" class="form-control" id="surplusPhoto" accept="image/*">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">出品</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // -----------------------
+    // ログアウト処理
+    // -----------------------
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("authToken");
+      window.location.href = "admin_login.html";
+    });
+
+    // -----------------------
+    // JWTトークン解析用関数
+    // -----------------------
+    function parseJwt(token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+          console.error("トークンの形式が不正です:", token);
+          return null;
+        }
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("JWT解析エラー:", e);
+        return null;
+      }
+    }
+
+    // -----------------------
+    // 企業名 (企業コード) を表示 & 企業IDを保持
+    // -----------------------
+    let currentUserCompanyId = null; // 投稿企業と比較用
+    let currentUserName = "";
+    function loadCompanyInfo() {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      const payload = parseJwt(token);
+      if (payload) {
+        const companyName = payload.sub || "Unknown Company";
+        const companyCode = payload.company_code || "No Code";
+        document.getElementById("userInfo").textContent = `${companyName} (${companyCode})`;
+        currentUserCompanyId = payload.company_id || null;
+        currentUserName = payload.username || "NoUsername";
+      }
+    }
+    loadCompanyInfo();
+
+    // -----------------------
+    // ページ初期化
+    // -----------------------
+    const authToken = localStorage.getItem("authToken") || "";
+    let allSurplusItems = []; // 取得した surplus===true の注文データ
+    document.addEventListener("DOMContentLoaded", function(){
+      loadSurplusMarket();
+      document.getElementById("addSurplusForm").addEventListener("submit", addSurplusItem);
+      document.getElementById("searchBtn").addEventListener("click", filterSurplusItems);
+      document.getElementById("searchInput").addEventListener("keyup", function(e){
+        if (e.key === "Enter") {
+          filterSurplusItems();
+        }
+      });
+      document.getElementById("searchLocationInput").addEventListener("keyup", function(e){
+        if (e.key === "Enter") {
+          filterSurplusItems();
+        }
+      });
+    });
+
+    // -----------------------
+    // 1) 余剰資材一覧をロードして表示
+    // -----------------------
+    function loadSurplusMarket() {
+      fetch("/orders", {
+        headers: { Authorization: "Bearer " + authToken }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("余剰資材一覧の取得に失敗");
+        return res.json();
+      })
+      .then(orders => {
+        // surplus==true のみ抽出
+        allSurplusItems = orders.filter(o => o.surplus === true);
+        renderSurplusList(allSurplusItems);
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message);
+      });
+    }
+
+    // -----------------------
+    // 2) 出品フォーム送信 (登録)
+    // -----------------------
+    function addSurplusItem(e) {
+      e.preventDefault();
+      const sellerCompany = document.getElementById("sellerCompany").value.trim();
+      const sellerName = document.getElementById("sellerName").value.trim();
+      const sellerContact = document.getElementById("sellerContact").value.trim();
+      const material = document.getElementById("surplusMaterial").value.trim();
+      const size = document.getElementById("surplusSize").value.trim();
+      const type = document.getElementById("surplusType").value.trim();
+      const price = parseFloat(document.getElementById("surplusPrice").value) || null;
+      const location = document.getElementById("surplusLocation").value.trim();
+      const remarks = document.getElementById("surplusRemarks").value.trim();
+      const photoFile = document.getElementById("surplusPhoto").files[0] || null;
+
+      // 余剰資材として orders に新規登録
+      // ※ Orderモデルに "surplus"フラグや "seller_company" 等があると想定
+      // project_id は使わない => null or "" で送る
+      const formData = new FormData();
+      formData.append("project_id", ""); // 使わない
+      formData.append("material", material);
+      formData.append("quantity", "1"); // ダミー
+      formData.append("order_status", "ordered");
+      formData.append("surplus", "true");
+      formData.append("seller_company", sellerCompany);
+      formData.append("seller_name", sellerName);
+      formData.append("seller_contact", sellerContact);
+      formData.append("price", price ? String(price) : "");
+      formData.append("location", location);
+      formData.append("remarks", remarks);
+      formData.append("size", size);
+      formData.append("type", type);
+
+      if (photoFile) {
+        formData.append("photo", photoFile); // multipartで送る
+      }
+
+      fetch("/orders", {
+        method: "POST",
+        headers: {
+          "Authorization": authToken
+        },
+        body: formData
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("出品登録に失敗しました");
+        return res.json();
+      })
+      .then(created => {
+        alert("余剰資材を出品しました (ID: " + created.id + ")");
+        // モーダルを閉じる
+        bootstrap.Modal.getInstance(document.getElementById("addSurplusModal")).hide();
+        // フォームをリセット
+        document.getElementById("addSurplusForm").reset();
+        // 一覧を再読み込み
+        loadSurplusMarket();
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message);
+      });
+    }
+
+    // -----------------------
+    // 3) 一覧表示
+    // -----------------------
+    function renderSurplusList(surplusItems) {
+      const container = document.getElementById("surplusList");
+      container.innerHTML = "";
+      if (!surplusItems.length) {
+        container.innerHTML = "<p>余剰資材の出品はありません。</p>";
+        return;
+      }
+      let html = "";
+      surplusItems.forEach(o => {
+        const sellerCompany = o.seller_company || "不明会社";
+        const sellerName = o.seller_name || "不明担当者";
+        const sellerContact = o.seller_contact || "連絡先不明";
+        const remarks = o.remarks || "";
+        const loc = o.location || "不明";
+        const priceStr = (o.price != null) ? `￥${o.price}` : "希望価格未定";
+        const statusLabel = getStatusLabel(o.order_status);
+        const sizeStr = o.size || "";
+        const typeStr = o.type || "";
+
+        // 画像URLがある場合のみ表示
+        let photoHtml = "";
+        if (o.photo_url) {
+          photoHtml = `<img src="${o.photo_url}" alt="余剰資材写真" class="surplus-photo">`;
+        }
+
+        // 「購入申し込み」ボタンは投稿企業IDと異なる場合に表示
+        let buyBtnHtml = "";
+        if (currentUserCompanyId && o.company_id !== currentUserCompanyId) {
+          buyBtnHtml = `
+            <button class="btn btn-success" onclick="contactSeller('${sellerCompany}','${sellerName}','${sellerContact}')">
+              購入申し込み
+            </button>
+          `;
+        }
+
+        // 取引完了ボタン & 削除ボタンは投稿企業のみ
+        let completeBtnHtml = "";
+        let deleteBtnHtml = "";
+        if (currentUserCompanyId && o.company_id === currentUserCompanyId) {
+          // 取引完了
+          completeBtnHtml = `
+            <button class="btn btn-warning ms-2" onclick="completeDeal(${o.id}, '${o.material}')">
+              取引完了
+            </button>
+          `;
+          // 削除
+          deleteBtnHtml = `
+            <button class="btn btn-danger ms-2" onclick="deleteDeal(${o.id})">
+              削除
+            </button>
+          `;
+        }
+
+        html += `
+          <div class="card">
+            <div class="card-body d-flex">
+              ${photoHtml}
+              <div>
+                <h5 class="card-title">【${o.material}】</h5>
+                <p class="card-text">
+                  <strong>サイズ:</strong> ${sizeStr}<br>
+                  <strong>材質:</strong> ${typeStr}<br>
+                  <strong>会社名:</strong> ${sellerCompany}<br>
+                  <strong>担当者:</strong> ${sellerName}<br>
+                  <strong>連絡先:</strong> ${sellerContact}<br>
+                  <strong>希望価格:</strong> ${priceStr}<br>
+                  <strong>所在地:</strong> ${loc}<br>
+                  <strong>状態:</strong> ${statusLabel}<br>
+                  <strong>備考:</strong> ${remarks}
+                </p>
+                <!-- 購入申し込みボタン / 取引完了ボタン / 削除ボタン -->
+                ${buyBtnHtml}
+                ${completeBtnHtml}
+                ${deleteBtnHtml}
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    // -----------------------
+    // 4) 「購入申し込み」ボタン押下
+    // -----------------------
+    function contactSeller(company, name, contact) {
+      alert(`以下の連絡先へ直接ご連絡ください。\n\n会社名: ${company}\n担当者: ${name}\n連絡先: ${contact}`);
+      // 実運用: メール送信 or LINE通知など
+    }
+
+    // -----------------------
+    // 5) 「取引完了」ボタン押下
+    // -----------------------
+    function completeDeal(orderId, material) {
+      const formData = new FormData();
+      formData.append("project_id", "");
+      formData.append("material", material);
+      formData.append("quantity", "1");
+      formData.append("order_status", "completed");
+      formData.append("surplus", "true");
+
+      fetch("/orders/" + orderId, {
+        method: "PUT",
+        headers: {
+          "Authorization": authToken
+        },
+        body: formData
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("取引完了処理に失敗しました");
+        return res.json();
+      })
+      .then(updated => {
+        alert("取引が完了しました。");
+        loadSurplusMarket();
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message);
+      });
+    }
+
+    // -----------------------
+    // 6) 「削除」ボタン押下
+    // -----------------------
+    function deleteDeal(orderId) {
+      if (!confirm("本当に削除しますか？")) return;
+      fetch("/orders/" + orderId, {
+        method: "DELETE",
+        headers: {
+          "Authorization": authToken
+        }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("削除に失敗しました");
+        return res.json();
+      })
+      .then(data => {
+        alert("出品を削除しました。");
+        loadSurplusMarket();
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message);
+      });
+    }
+
+    // -----------------------
+    // 7) 状態ラベルの表示整形
+    // -----------------------
+    function getStatusLabel(status) {
+      switch(status) {
+        case "ordered":
+          return "<span class='badge bg-warning text-dark'>出品中</span>";
+        case "shipping":
+          return "<span class='badge bg-info text-dark'>配送中</span>";
+        case "received":
+          return "<span class='badge bg-success'>受領済</span>";
+        case "completed":
+          return "<span class='badge bg-secondary'>取引完了</span>";
+        default:
+          return `<span class='badge bg-secondary'>${status}</span>`;
+      }
+    }
+
+    // -----------------------
+    // 8) 検索機能 (クライアント側)
+    // -----------------------
+    function filterSurplusItems() {
+      const keyword = document.getElementById("searchInput").value.trim().toLowerCase();
+      const locKeyword = document.getElementById("searchLocationInput").value.trim().toLowerCase();
+
+      if (!keyword && !locKeyword) {
+        renderSurplusList(allSurplusItems);
+        return;
+      }
+      const filtered = allSurplusItems.filter(o => {
+        const mat = (o.material || "").toLowerCase();
+        const comp = (o.seller_company || "").toLowerCase();
+        const name = (o.seller_name || "").toLowerCase();
+        const contact = (o.seller_contact || "").toLowerCase();
+        const remarks = (o.remarks || "").toLowerCase();
+        const size = (o.size || "").toLowerCase();
+        const type = (o.type || "").toLowerCase();
+        const loc = (o.location || "").toLowerCase();
+
+        const basicMatch = (
+          mat.includes(keyword) ||
+          comp.includes(keyword) ||
+          name.includes(keyword) ||
+          contact.includes(keyword) ||
+          remarks.includes(keyword) ||
+          size.includes(keyword) ||
+          type.includes(keyword)
+        );
+        const locationMatch = loc.includes(locKeyword);
+
+        if (keyword && locKeyword) {
+          return basicMatch && locationMatch;
+        } else if (keyword) {
+          return basicMatch;
+        } else if (locKeyword) {
+          return locationMatch;
+        }
+        return true;
+      });
+      renderSurplusList(filtered);
+    }
+  </script>
+</body>
+</html>

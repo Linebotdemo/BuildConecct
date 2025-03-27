@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>BuildConnect - 登録関連</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap, FontAwesome, FullCalendar のCSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.css" />
+  <style>
+    /* 全体レイアウト */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow-x: hidden;
+    }
+    body {
+      background-color: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+    }
+    /* ヘッダー */
+    #header {
+      background-color: #343a40;
+      color: #fff;
+      padding: 10px 20px;
+      flex-shrink: 0;
+    }
+    /* コンテナ：サイドバー＋メイン */
+    #container {
+      display: flex;
+      flex: 1;
+      height: calc(100% - 60px);
+    }
+    /* サイドバー（幅240pxに固定） */
+    #sidebar {
+      width: 240px;
+      background-color: #495057;
+      padding: 20px 10px;
+      overflow-y: auto;
+    }
+    /* サイドバーのリンク設定 */
+    #sidebar .nav-link {
+      color: #fff;
+      margin-bottom: 1rem;
+      display: block;
+      padding: 5px 10px;
+      border-radius: 0.25rem;
+      text-decoration: none;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #sidebar .nav-link:hover,
+    #sidebar .nav-link.active {
+      background-color: #6c757d;
+    }
+    /* メインコンテンツ（左マージン240pxに合わせる） */
+    #main-content {
+      margin-left: 240px;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    /* 登録関連用追加スタイル */
+    .container-registration {
+      margin-top: 30px;
+    }
+    /* テーブルセル */
+    table th, table td {
+      vertical-align: middle;
+    }
+    /* ドロップゾーン（資格入力用） */
+    .drop-zone {
+      border: 2px dashed #ced4da;
+      padding: 10px;
+      min-height: 50px;
+      margin-top: 10px;
+      background-color: #fff;
+    }
+    /* 資格候補アイテム（ドラッグ対象） */
+    .draggable-item {
+      padding: 5px 10px;
+      margin: 3px;
+      background-color: #e9ecef;
+      border: 1px solid #ddd;
+      border-radius: 0.25rem;
+      cursor: move;
+      display: inline-block;
+    }
+    /* バッジ表示（資格入力後の表示） */
+    .badge-qualification {
+      background-color: #007bff;
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 0.25rem;
+      margin: 2px;
+      display: inline-block;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3 class="mb-0">BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+      <button id="logoutBtn" class="btn btn-outline-light btn-sm">ログアウト</button>
+    </div>
+  </header>
+
+  <!-- コンテナ：サイドバー＋メイン -->
+  <div id="container">
+    <!-- サイドバー -->
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a class="nav-link" href="project_management.html">プロジェクト管理</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="order_management.html">発注管理</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="reports.html">施工報告</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="schedule_management.html">スケジュール管理</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="inventory_management.html">資材在庫管理</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link active" href="registration.html">登録管理</a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- メインコンテンツ：登録関連 -->
+    <div id="main-content" class="w-100">
+      <div class="container-registration">
+        <h2>登録関連</h2>
+        <!-- タブナビゲーション -->
+        <ul class="nav nav-tabs" id="registrationTab" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="material-tab" data-bs-toggle="tab" data-bs-target="#material" type="button" role="tab" aria-controls="material" aria-selected="true">資材</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="employee-tab" data-bs-toggle="tab" data-bs-target="#employee" type="button" role="tab" aria-controls="employee" aria-selected="false">従業員</button>
+          </li>
+        </ul>
+        <div class="tab-content" id="registrationTabContent">
+          <!-- 資材タブ -->
+          <div class="tab-pane fade show active" id="material" role="tabpanel" aria-labelledby="material-tab">
+            <div class="d-flex my-3">
+              <input type="text" id="materialSearchInput" class="form-control me-2" placeholder="資材名または取引先名で検索">
+              <select id="materialSortSelect" class="form-select me-2" style="width:200px;">
+                <option value="name_asc">資材名 昇順</option>
+                <option value="name_desc">資材名 降順</option>
+                <option value="price_asc">価格 昇順</option>
+                <option value="price_desc">価格 降順</option>
+              </select>
+              <button id="materialFilterBtn" class="btn btn-secondary">絞り込み</button>
+              <button id="materialRegisterBtn" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#materialModal">登録</button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-striped" id="materialTable">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>資材名</th>
+                    <th>価格</th>
+                    <th>取引先名</th>
+                    <th>最低在庫数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 資材一覧は JavaScript で挿入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <!-- 従業員タブ -->
+          <div class="tab-pane fade" id="employee" role="tabpanel" aria-labelledby="employee-tab">
+            <div class="d-flex my-3">
+              <input type="text" id="employeeSearchInput" class="form-control me-2" placeholder="従業員名または資格で検索">
+              <select id="employeeSortSelect" class="form-select me-2" style="width:200px;">
+                <option value="name_asc">従業員名 昇順</option>
+                <option value="name_desc">従業員名 降順</option>
+              </select>
+              <button id="employeeFilterBtn" class="btn btn-secondary">絞り込み</button>
+              <button id="employeeRegisterBtn" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#employeeModal">登録</button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-striped" id="employeeTable">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>従業員名</th>
+                    <th>資格</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 従業員一覧は JavaScript で挿入 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- モーダル：資材登録フォーム -->
+  <div class="modal fade" id="materialModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="materialForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">新規資材登録</h5>
+          <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="materialNameInput" class="form-label">資材名</label>
+            <input type="text" class="form-control" id="materialNameInput" required>
+          </div>
+          <div class="mb-3">
+            <label for="materialPriceInput" class="form-label">価格</label>
+            <input type="number" step="0.01" class="form-control" id="materialPriceInput" required>
+          </div>
+          <div class="mb-3">
+            <label for="supplierNameInput" class="form-label">取引先名</label>
+            <input type="text" class="form-control" id="supplierNameInput" required>
+          </div>
+          <div class="mb-3">
+            <label for="minimumStockInput" class="form-label">最低在庫数</label>
+            <input type="number" class="form-control" id="minimumStockInput" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">登録</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- モーダル：従業員登録フォーム -->
+  <div class="modal fade" id="employeeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="employeeForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">新規従業員登録</h5>
+          <button type="button" class="btn btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="employeeNameInput" class="form-label">従業員名</label>
+            <input type="text" class="form-control" id="employeeNameInput" required>
+          </div>
+          <div class="mb-3">
+            <label for="qualificationsInput" class="form-label">資格（カンマ区切り）</label>
+            <input type="text" class="form-control" id="qualificationsInput" placeholder="例: 施工管理技士, 安全管理者">
+          </div>
+          <!-- バッジ表示エリア -->
+          <div class="mb-3">
+            <label class="form-label">資格一覧</label>
+            <div id="qualificationDisplay" class="drop-zone"></div>
+          </div>
+          <!-- 資格候補エリア：ドラッグ＆ドロップで追加 -->
+          <div class="mb-3">
+            <label class="form-label">資格候補（ドラッグ＆ドロップ）</label>
+            <div id="qualificationCandidates" class="mb-2">
+              <span class="draggable-item" draggable="true">施工管理技士</span>
+              <span class="draggable-item" draggable="true">安全管理者</span>
+              <span class="draggable-item" draggable="true">建築士</span>
+              <span class="draggable-item" draggable="true">土木施工管理技士</span>
+              <span class="draggable-item" draggable="true">設備施工管理技士</span>
+              <span class="draggable-item" draggable="true">電気施工管理技士</span>
+              <span class="draggable-item" draggable="true">機械施工管理技士</span>
+              <span class="draggable-item" draggable="true">その他</span>
+            </div>
+            <label class="form-label">ドラッグ＆ドロップエリア</label>
+            <div id="qualificationDropZone" class="drop-zone"></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="submit" class="btn btn-primary">登録</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- jQuery, Bootstrap, FullCalendar のJS読み込み -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.js"></script>
+  <script>
+    /**********************************
+     * 初期設定・グローバル変数
+     **********************************/
+    const API_BASE = "/";
+    const authToken = localStorage.getItem("authToken") || "";
+    let materials = [];    // 登録済み資材一覧
+    let employees = [];    // 登録済み従業員一覧
+
+    /**********************************
+     * ユーザー情報表示とログアウト
+     **********************************/
+    function parseJwt(token) {
+      try {
+        const parts = token.split(".");
+        if (parts.length !== 3) {
+          console.error("トークンの形式が不正です:", token);
+          return null;
+        }
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split("")
+            .map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+            .join("")
+        );
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("JWT解析エラー:", e);
+        return null;
+      }
+    }
+    function loadCompanyInfo() {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      const payload = parseJwt(token);
+      if (payload) {
+        const companyName = payload.sub || "Unknown Company";
+        const companyCode = payload.company_code || "No Code";
+        document.getElementById("userInfo").textContent = `${companyName} (${companyCode})`;
+      }
+    }
+    loadCompanyInfo();
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("authToken");
+      window.location.href = "admin_login.html";
+    });
+
+    /**********************************
+     * 資材一覧取得＆表示（資材タブ）
+     **********************************/
+    function loadMaterials() {
+      fetch(API_BASE + "registration/materials", { headers: { "Authorization": "Bearer " + authToken } })
+        .then(res => {
+          if (!res.ok) throw new Error("資材一覧の取得に失敗しました");
+          return res.json();
+        })
+        .then(data => {
+          materials = data;
+          renderMaterialTable(materials);
+        })
+        .catch(err => {
+          console.error(err);
+          alert(err.message);
+        });
+    }
+    function renderMaterialTable(materials) {
+      const tbody = document.querySelector("#materialTable tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      if (materials.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='5'>資材がありません</td></tr>";
+        return;
+      }
+      materials.forEach(m => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${m.id}</td>
+          <td>${m.name}</td>
+          <td>${m.price}</td>
+          <td>${m.supplier_name}</td>
+          <td>${m.minimum_stock}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    function filterAndSortMaterials() {
+      let filtered = [...materials];
+      const searchVal = document.getElementById("materialSearchInput").value.trim().toLowerCase();
+      const sortVal = document.getElementById("materialSortSelect").value;
+      if (searchVal) {
+        filtered = filtered.filter(m => 
+          m.name.toLowerCase().includes(searchVal) ||
+          m.supplier_name.toLowerCase().includes(searchVal)
+        );
+      }
+      if (sortVal === "name_asc") {
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sortVal === "name_desc") {
+        filtered.sort((a, b) => b.name.localeCompare(a.name));
+      } else if (sortVal === "price_asc") {
+        filtered.sort((a, b) => a.price - b.price);
+      } else if (sortVal === "price_desc") {
+        filtered.sort((a, b) => b.price - a.price);
+      }
+      renderMaterialTable(filtered);
+    }
+    document.getElementById("materialFilterBtn").addEventListener("click", filterAndSortMaterials);
+
+    /**********************************
+     * 従業員一覧取得＆表示（従業員タブ）
+     **********************************/
+    function loadEmployees() {
+      fetch(API_BASE + "registration/employees", { headers: { "Authorization": "Bearer " + authToken } })
+        .then(res => {
+          if (!res.ok) throw new Error("従業員一覧の取得に失敗しました");
+          return res.json();
+        })
+        .then(data => {
+          employees = data;
+          renderEmployeeTable(employees);
+        })
+        .catch(err => {
+          console.error(err);
+          alert(err.message);
+        });
+    }
+    function renderEmployeeTable(employees) {
+      const tbody = document.querySelector("#employeeTable tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      if (employees.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='3'>従業員がいません</td></tr>";
+        return;
+      }
+      employees.forEach(e => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${e.id}</td>
+          <td>${e.name}</td>
+          <td>${e.qualifications || "-"}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+    function filterAndSortEmployees() {
+      let filtered = [...employees];
+      const searchVal = document.getElementById("employeeSearchInput").value.trim().toLowerCase();
+      const sortVal = document.getElementById("employeeSortSelect").value;
+      if (searchVal) {
+        filtered = filtered.filter(e => 
+          e.name.toLowerCase().includes(searchVal) ||
+          (e.qualifications && e.qualifications.toLowerCase().includes(searchVal))
+        );
+      }
+      if (sortVal === "name_asc") {
+        filtered.sort((a, b) => a.name.localeCompare(b.name));
+      } else if (sortVal === "name_desc") {
+        filtered.sort((a, b) => b.name.localeCompare(a.name));
+      }
+      renderEmployeeTable(filtered);
+    }
+    document.getElementById("employeeFilterBtn").addEventListener("click", filterAndSortEmployees);
+
+    /**********************************
+     * 新規登録フォーム送信（資材）
+     **********************************/
+    document.getElementById("materialForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const name = document.getElementById("materialNameInput").value.trim();
+      const price = parseFloat(document.getElementById("materialPriceInput").value);
+      const supplier = document.getElementById("supplierNameInput").value.trim();
+      const minStock = parseInt(document.getElementById("minimumStockInput").value);
+      const payload = { name, price, supplier_name: supplier, minimum_stock: minStock };
+      fetch(API_BASE + "registration/materials", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + authToken
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("資材登録に失敗しました");
+        return res.json();
+      })
+      .then(data => {
+        alert("資材登録完了！ID:" + data.id);
+        bootstrap.Modal.getInstance(document.getElementById("materialModal")).hide();
+        loadMaterials();
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message);
+      });
+    });
+
+    /**********************************
+     * 新規登録フォーム送信（従業員）
+     **********************************/
+    document.getElementById("employeeForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const name = document.getElementById("employeeNameInput").value.trim();
+      const qualifications = document.getElementById("qualificationsInput").value.trim();
+      const payload = { name, qualifications };
+      fetch(API_BASE + "registration/employees", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + authToken
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("従業員登録に失敗しました");
+        return res.json();
+      })
+      .then(data => {
+        alert("従業員登録完了！ID:" + data.id);
+        bootstrap.Modal.getInstance(document.getElementById("employeeModal")).hide();
+        loadEmployees();
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message);
+      });
+    });
+
+    /**********************************
+     * 資格候補ドラッグ＆ドロップ処理とバッジ表示（従業員登録用）
+     **********************************/
+    function initQualificationDragAndDrop() {
+      // 資格候補アイテムにドラッグイベントを設定
+      document.querySelectorAll("#qualificationCandidates .draggable-item").forEach(item => {
+        // 明示的に draggable 属性を設定
+        item.setAttribute("draggable", "true");
+        item.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", item.textContent.trim());
+        });
+      });
+      // ドロップエリア設定
+      const dropZone = document.getElementById("qualificationDropZone");
+      dropZone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = "#f0f0f0";
+      });
+      dropZone.addEventListener("dragleave", (e) => {
+        dropZone.style.backgroundColor = "#fff";
+      });
+      dropZone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        dropZone.style.backgroundColor = "#fff";
+        const qual = e.dataTransfer.getData("text/plain").trim();
+        // すでに同じ資格がある場合は追加しない
+        if (!dropZone.querySelector(`span[data-qual="${qual}"]`)) {
+          addQualificationBadge(qual);
+        }
+        updateInputFromBadges();
+      });
+    }
+    // 入力欄の内容を解析し、バッジ表示を更新（入力欄の内容を drop zone に反映）
+    function updateInputFromBadges() {
+      const dropZone = document.getElementById("qualificationDropZone");
+      const badges = Array.from(dropZone.querySelectorAll("span.badge-qualification")).map(item => item.textContent.trim());
+      document.getElementById("qualificationsInput").value = badges.join(", ");
+    }
+    // バッジを追加する関数
+    function addQualificationBadge(qualification) {
+      const dropZone = document.getElementById("qualificationDropZone");
+      const span = document.createElement("span");
+      span.className = "badge-qualification";
+      span.setAttribute("data-qual", qualification);
+      span.textContent = qualification;
+      // クリックで削除可能にする
+      span.addEventListener("click", () => {
+        span.remove();
+        updateInputFromBadges();
+      });
+      dropZone.appendChild(span);
+    }
+    // ドラッグ＆ドロップの初期化を、モーダルが表示されたタイミングでも実施する
+    document.getElementById("employeeModal").addEventListener("shown.bs.modal", () => {
+      initQualificationDragAndDrop();
+    });
+    // 初期処理：DOM Loaded
+    document.addEventListener("DOMContentLoaded", function() {
+      loadMaterials();
+      loadEmployees();
+      // ここで初回のドラッグ＆ドロップ初期化（モーダルが既にDOMに含まれている場合）
+      initQualificationDragAndDrop();
+    });
+  </script>
+</body>
+</html>

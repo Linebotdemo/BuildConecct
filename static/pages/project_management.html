@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>BuildConnect - プロジェクト管理</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn.dhtmlx.com/gantt/edge/dhtmlxGantt.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.css" />
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; overflow-x: hidden; }
+    body { background-color: #f8f9fa; display: flex; flex-direction: column; }
+    #header { background-color: #343a40; color: #fff; padding: 10px 20px; flex-shrink: 0; }
+    #container { display: flex; flex: 1; height: calc(100% - 60px); }
+    #sidebar { width: 240px; background-color: #495057; padding: 20px 10px; overflow-y: auto; }
+    #sidebar .nav-link { color: #fff; margin-bottom: 1rem; display: block; padding: 5px 10px; border-radius: 0.25rem; text-decoration: none; width: 100%; box-sizing: border-box; }
+    #sidebar .nav-link:hover, #sidebar .nav-link.active { background-color: #6c757d; }
+    #main-content { margin-left: 240px; padding: 20px; overflow-y: auto; flex: 1; position: relative; }
+    #listView { display: block; min-height: 400px; }
+    #detailView { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #fff; padding: 20px; }
+    #projectTable { width: 100%; table-layout: auto; display: table; }
+    #projectTable th, #projectTable td { vertical-align: middle; white-space: nowrap; padding: 8px; }
+    .form-group { margin-bottom: 15px; }
+    .task-section { margin-top: 20px; }
+    .task-section h5 { margin-bottom: 10px; }
+    .table-responsive { min-height: 200px; overflow-x: auto; display: block; }
+    #ordersContent table, #reportsContent table, #scheduleContent table, #inventoryContent table { width: 100%; border-collapse: collapse; }
+    .status-準備中 { color: #6c757d !important; font-weight: bold; }
+    .status-遅延中 { color: #dc3545 !important; font-weight: bold; }
+    .status-進行中 { color: #28a745 !important; font-weight: bold; }
+    .status-完了 { color: #007bff !important; font-weight: bold; }
+    .status-工程通り { color: #007bff !important; font-weight: bold; }
+    .status-発注済 { color: #ffeb3b !important; font-weight: bold; }
+    .status-受領済 { color: #4caf50 !important; font-weight: bold; }
+    .status-承諾 { color: #4caf50 !important; font-weight: bold; }
+    .status-却下 { color: #dc3545 !important; font-weight: bold; }
+    .status-未処理 { color: #6c757d !important; font-weight: bold; }
+    .status-未着手 { color: #6c757d !important; font-weight: bold; }
+    .loading { color: #6c757d; font-style: italic; }
+    .table-responsive .table tbody tr.highlight-red {
+      background-color: #ffcccc !important;
+    }
+    .table-striped tbody tr.highlight-red:nth-child(odd),
+    .table-striped tbody tr.highlight-red:nth-child(even) {
+      background-color: #ffcccc !important;
+    }
+    .dropzone { border: 2px dashed #007bff; padding: 20px; text-align: center; margin-bottom: 20px; cursor: pointer; }
+    .dropzone.dragover { background-color: #e9ecef; }
+    .pagination { margin-top: 15px; }
+    .table th, .table td { padding: 12px; vertical-align: middle; border: 1px solid #dee2e6; }
+    .table-hover tbody tr:hover { background-color: #e0e0e0; }
+    .table thead th { background-color: #fff; color: #000; font-weight: bold; text-align: center; border-bottom: 2px solid #dee2e6; }
+    .table tbody tr:nth-child(odd) { background-color: #f5f5f5; }
+    .table tbody tr:nth-child(even) { background-color: #fff; }
+    .table tbody td { text-align: left; }
+    #newProjectManager { height: 150px; }
+  </style>
+  <script>
+    function parseJwt(token) {
+      console.log("parseJwt: トークン解析開始", token);
+      try {
+        const base64Url = token.split(".")[1];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = decodeURIComponent(atob(base64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+        console.log("parseJwt: 解析結果", jsonPayload);
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        console.error("parseJwt: JWT解析エラー", e);
+        return null;
+      }
+    }
+
+    function loadCompanyInfo() {
+      console.log("loadCompanyInfo: 企業情報ロード開始");
+      const token = localStorage.getItem("authToken");
+      console.log("loadCompanyInfo: 取得したトークン", token);
+      if (!token) {
+        console.error("loadCompanyInfo: トークンがありません");
+        document.getElementById("userInfo").textContent = "ログインしてください";
+        return;
+      }
+      fetch("/companies", {
+        headers: { "Authorization": "Bearer " + token }
+      })
+      .then(resp => {
+        if (!resp.ok) throw new Error("会社情報取得失敗: " + resp.status);
+        return resp.json();
+      })
+      .then(companies => {
+        const payload = parseJwt(token);
+        const company = companies.find(c => c.company_code === payload.company_code);
+        if (company) {
+          document.getElementById("userInfo").textContent = `${company.company_name} (${company.company_code})`;
+        } else {
+          document.getElementById("userInfo").textContent = "企業情報が見つかりません";
+        }
+      })
+      .catch(e => {
+        console.error("loadCompanyInfo error:", e);
+        document.getElementById("userInfo").textContent = "未ログイン";
+      });
+    }
+  </script>
+</head>
+<body>
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3 class="mb-0">BuildConnect 会員サイト</h3>
+    <div>
+      <span id="userInfo">企業名 (企業コード)</span>
+      <button id="logoutBtn" class="btn btn-outline-light btn-sm">
+        <i class="fas fa-sign-out-alt"></i> ログアウト
+      </button>
+    </div>
+  </header>
+
+  <div id="container">
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link active" href="project_management.html">プロジェクト管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="/static/pages/order_management.html">発注管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="/static/pages/reports.html">施工報告</a></li>
+        <li class="nav-item"><a class="nav-link" href="/static/pages/schedule_management.html">スケジュール管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="/static/pages/inventory_management.html">資材在庫管理</a></li>
+        <li class="nav-item"><a class="nav-link" href="registration.html">登録管理</a></li>
+      </ul>
+    </nav>
+    <div id="main-content" class="w-100">
+      <div id="listView">
+        <h2>プロジェクト管理</h2>
+        <div class="d-flex search-area gap-2 mb-3">
+          <input type="text" id="searchInput" class="form-control" placeholder="プロジェクト名または担当者で検索" />
+          <select id="statusFilter" class="form-select" style="width:150px;">
+            <option value="">状態（すべて）</option>
+            <option value="準備中">準備中</option>
+            <option value="遅延中">遅延中</option>
+            <option value="進行中">進行中</option>
+            <option value="完了">完了</option>
+          </select>
+          <button id="filterBtn" class="btn btn-secondary"><i class="fas fa-filter"></i> フィルター</button>
+          <button id="exportCsvBtn" class="btn btn-outline-info">CSV出力</button>
+          <button id="addProjectBtn" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#addProjectModal">
+            <i class="fas fa-plus"></i> 新規プロジェクト登録
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-striped" id="projectTable">
+            <thead>
+              <tr>
+                <th style="width: 5%;"> RouteID</th>
+                <th style="width: 15%;">プロジェクト名</th>
+                <th style="width: 15%;">所在地</th>
+                <th style="width: 10%;">建物種別</th>
+                <th style="width: 8%;">地上階数</th>
+                <th style="width: 8%;">地下階数</th>
+                <th style="width: 10%;">担当者</th>
+                <th style="width: 10%;">開始日</th>
+                <th style="width: 10%;">完了日</th>
+                <th style="width: 8%;">状態</th>
+                <th style="width: 10%;">操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <nav>
+          <ul class="pagination" id="projectsPagination"></ul>
+        </nav>
+      </div>
+      <div id="detailView">
+        <button id="backToListBtn" class="btn btn-secondary mb-3" onclick="backToList()">
+          <i class="fas fa-arrow-left"></i> 一覧へ戻る
+        </button>
+        <div id="projectHeader" class="card mb-3">
+          <div class="card-body">
+            <h4>プロジェクト名: <span id="detailProjectName"></span></h4>
+            <p>所在地: <span id="detailLocation"></span></p>
+            <p>建物種別: <span id="detailBuildingType"></span></p>
+            <p>地上階数: <span id="detailGroundFloors"></span></p>
+            <p>地下階数: <span id="detailBasementFloors"></span></p>
+            <p>担当者: <span id="detailProjectManager"></span></p>
+            <p>開始日: <span id="detailStartDate"></span></p>
+            <p>完了日: <span id="detailEndDate"></span></p>
+            <p>状態: <span id="detailStatus" class="status"></span></p>
+            <div class="task-section">
+              <h5>本日のタスク</h5>
+              <div id="todayTasks">読み込み中...</div>
+              <h5 class="mt-3">遅延タスク</h5>
+              <div id="overdueTasks">読み込み中...</div>
+            </div>
+          </div>
+        </div>
+        <ul class="nav nav-tabs" id="detailTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">発注管理</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="reports-tab" data-bs-toggle="tab" data-bs-target="#reports" type="button" role="tab">施工報告</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="schedule-tab" data-bs-toggle="tab" data-bs-target="#schedule" type="button" role="tab">スケジュール管理</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="inventory-tab" data-bs-toggle="tab" data-bs-target="#inventory" type="button" role="tab">在庫管理</button>
+          </li>
+        </ul>
+        <div class="tab-content" id="detailTabsContent">
+          <div class="tab-pane fade show active" id="orders" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="ordersSearch" class="form-control" placeholder="資材名または取引先で検索" />
+              <select id="ordersStatusFilter" class="form-select" style="width:150px;">
+                <option value="">状態（すべて）</option>
+                <option value="発注済">発注済</option>
+                <option value="受領済">受領済</option>
+              </select>
+              <select id="ordersSort" class="form-select" style="width:150px;">
+                <option value="order_date_asc">発注日（昇順）</option>
+                <option value="order_date_desc">発注日（降順）</option>
+                <option value="delivery_date_asc">納品日（昇順）</option>
+                <option value="delivery_date_desc">納品日（降順）</option>
+              </select>
+            </div>
+            <div id="ordersContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>注文番号</th>
+                    <th>資材名</th>
+                    <th>取引先</th>
+                    <th>数量</th>
+                    <th>単価</th>
+                    <th>合計金額</th>
+                    <th>発注日</th>
+                    <th>納品日</th>
+                    <th>状態</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="ordersPagination"></ul>
+            </nav>
+          </div>
+          <div class="tab-pane fade" id="reports" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="reportsSearch" class="form-control" placeholder="報告内容または報告者で検索" />
+              <select id="reportsStatusFilter" class="form-select" style="width:150px;">
+                <option value="">状態（すべて）</option>
+                <option value="承諾">承諾</option>
+                <option value="却下">却下</option>
+                <option value="未処理">未処理</option>
+              </select>
+              <select id="reportsSort" class="form-select" style="width:150px;">
+                <option value="created_at_asc">報告日（昇順）</option>
+                <option value="created_at_desc">報告日（降順）</option>
+              </select>
+            </div>
+            <div id="reportsContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th style="width: 5%;">ID</th>
+                    <th style="width: 40%;">報告内容</th>
+                    <th style="width: 20%;">報告者</th>
+                    <th style="width: 20%;">報告日</th>
+                    <th style="width: 15%;">状態</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="reportsPagination"></ul>
+            </nav>
+          </div>
+          <div class="tab-pane fade" id="schedule" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="scheduleSearch" class="form-control" placeholder="タスク名または担当者で検索" />
+              <select id="scheduleStatusFilter" class="form-select" style="width:150px;">
+                <option value="">状態（すべて）</option>
+                <option value="未着手">未着手</option>
+                <option value="完了">完了</option>
+                <option value="遅延中">遅延中</option>
+              </select>
+              <select id="scheduleSort" class="form-select" style="width:150px;">
+                <option value="start_time_asc">開始日（昇順）</option>
+                <option value="start_time_desc">開始日（降順）</option>
+                <option value="end_time_asc">終了日（昇順）</option>
+                <option value="end_time_desc">終了日（降順）</option>
+              </select>
+            </div>
+            <div id="scheduleContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th style="width: 5%;">ID</th>
+                    <th style="width: 15%;">プロジェクト名</th>
+                    <th style="width: 20%;">タスク名</th>
+                    <th style="width: 15%;">担当者</th>
+                    <th style="width: 20%;">開始日時</th>
+                    <th style="width: 20%;">終了日時</th>
+                    <th style="width: 15%;">状態</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="schedulePagination"></ul>
+            </nav>
+          </div>
+          <div class="tab-pane fade" id="inventory" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="inventorySearch" class="form-control" placeholder="資材名または保管場所で検索" />
+              <select id="inventorySort" class="form-select" style="width:150px;">
+                <option value="quantity_asc">数量（昇順）</option>
+                <option value="quantity_desc">数量（降順）</option>
+              </select>
+            </div>
+            <div id="inventoryContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>プロジェクト名</th>
+                    <th>資材名</th>
+                    <th>数量</th>
+                    <th>保管場所</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="inventoryPagination"></ul>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="addProjectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">新規プロジェクト登録</h5>
+          <button type="button" class="btn btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="newProjectForm">
+            <div class="mb-3">
+              <label for="newProjectName" class="form-label">プロジェクト名 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="newProjectName" name="name" required>
+            </div>
+            <div class="mb-3">
+              <label for="newProjectLocation" class="form-label">所在地</label>
+              <input type="text" class="form-control" id="newProjectLocation" name="location">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectBuildingType" class="form-label">建物種別</label>
+              <input type="text" class="form-control" id="newProjectBuildingType" name="building_type">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectGroundFloors" class="form-label">地上階数</label>
+              <input type="number" class="form-control" id="newProjectGroundFloors" name="ground_floors" min="0">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectBasementFloors" class="form-label">地下階数</label>
+              <input type="number" class="form-control" id="newProjectBasementFloors" name="basement_floors" min="0">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectManager" class="form-label">担当者 <span class="text-danger">*</span></label>
+              <select class="form-select" id="newProjectManager" name="project_manager" multiple required>
+                <option value="">読み込み中...</option>
+              </select>
+              <small class="form-text text-muted">Ctrlキーを押しながらクリックで複数選択できます。</small>
+            </div>
+            <div class="mb-3">
+              <label for="newProjectStartDate" class="form-label">開始日</label>
+              <input type="date" class="form-control" id="newProjectStartDate" name="start_date">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectEndDate" class="form-label">完了日</label>
+              <input type="date" class="form-control" id="newProjectEndDate" name="end_date">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="submitNewProjectBtn">登録</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.js"></script>
+  <script src="https://cdn.dhtmlx.com/gantt/edge/dhtmlxGantt.js"></script>
+</body>
+<script>
+  const API_BASE = "http://127.0.0.1:8000/";
+  const authToken = localStorage.getItem("authToken") || "your-auth-token-here";
+  let projects = [];
+  let orders = [];
+  let reports = [];
+  let schedulesData = [];
+  let inventoryData = [];
+  let currentProjectId = null;
+  let projectMap = {};
+  let minStockLevels = {
+    "コンクリート": 100,
+    "鉄筋": 50,
+    "A-15": 20,
+    "www": 50,
+    "UK": 20,
+    "西中": 5,
+    "asdasdasdasdasd": 5,
+    "国回": 5,
+    "TEST": 20,
+    "U-1": 20,
+    "AFAFSAFA": 1000,
+    "北中": 50,
+    "2020": 100
+  };
+
+  const statusTranslations = {
+    "ordered": "発注済",
+    "Ordered": "発注済",
+    "received": "受領済",
+    "Received": "受領済",
+    "発注済": "発注済",
+    "受領済": "受領済",
+    "approved": "承諾",
+    "Approved": "承諾",
+    "rejected": "却下",
+    "Rejected": "却下",
+    "pending": "未処理",
+    "Pending": "未処理",
+    "承諾": "承諾",
+    "却下": "却下",
+    "未処理": "未処理",
+    "in progress": "進行中",
+    "In Progress": "進行中",
+    "not started": "未着手",
+    "Not Started": "未着手",
+    "completed": "完了",
+    "Completed": "完了",
+    "overdue": "遅延中",
+    "Overdue": "遅延中",
+    "未着手": "未着手",
+    "完了": "完了",
+    "遅延中": "遅延中"
+  };
+
+  function getAuthHeaders() {
+    return { "Authorization": "Bearer " + authToken, "Content-Type": "application/json" };
+  }
+
+  function formatDateTime(dateStr) {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return date.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" });
+  }
+
+  function translateStatus(status) {
+    if (!status) return "-";
+    const normalizedStatus = status.toLowerCase().replace(/_/g, " ");
+    const translated = statusTranslations[normalizedStatus] || statusTranslations[status] || status || "-";
+    console.log(`[DEBUG] 状態翻訳: ${status} -> ${translated}`);
+    return translated;
+  }
+
+  function updateProjectStatus(project) {
+    const now = new Date();
+    const startDate = project.start_date ? new Date(project.start_date) : null;
+    const endDate = project.end_date ? new Date(project.end_date) : null;
+
+    const overdueTasks = schedulesData.filter(s => 
+      s.project_id == project.id && 
+      new Date(s.end_time) < now && 
+      translateStatus(s.status) !== "完了"
+    );
+    if (overdueTasks.length > 0) {
+      return "遅延中";
+    }
+
+    if (!startDate || now < startDate) {
+      return "準備中";
+    }
+
+    const allTasksCompleted = schedulesData.every(s => 
+      s.project_id == project.id ? translateStatus(s.status) === "完了" : true
+    );
+    if (allTasksCompleted && endDate && now > endDate) {
+      return "完了";
+    }
+
+    return "進行中";
+  }
+
+  async function fetchProjectsForMapping() {
+    try {
+      const res = await fetch(API_BASE + "projects", { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("プロジェクト一覧の取得に失敗しました: " + await res.text());
+      const projects = await res.json();
+      projectMap = {};
+      projects.forEach(proj => {
+        projectMap[proj.id] = proj.name;
+      });
+      console.log("projectMap:", projectMap);
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    }
+  }
+
+  async function loadEmployees() {
+    console.log("loadEmployees: 従業員データロード開始");
+    try {
+      const res = await fetch(API_BASE + "registration/employees", { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("従業員一覧の取得に失敗しました: " + await res.text());
+      const employees = await res.json();
+      console.log("loadEmployees: 取得した従業員データ", employees);
+
+      const select = document.getElementById("newProjectManager");
+      select.innerHTML = "";
+
+      if (employees.length === 0) {
+        select.innerHTML = '<option value="">従業員が見つかりません</option>';
+      } else {
+        employees.forEach(employee => {
+          const option = document.createElement("option");
+          option.value = employee.name;
+          option.textContent = `${employee.name} (${employee.role || '役割未設定'})`;
+          select.appendChild(option);
+        });
+      }
+    } catch (err) {
+      console.error("loadEmployees: エラー", err);
+      document.getElementById("newProjectManager").innerHTML = '<option value="">従業員の取得に失敗しました</option>';
+    }
+  }
+
+  function loadProjects(page = 1) {
+    console.log("loadProjects: プロジェクトデータロード開始", { page });
+    const searchText = document.getElementById("searchInput").value.toLowerCase();
+    const statusFilter = document.getElementById("statusFilter").value;
+    fetch(API_BASE + "projects", { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error("プロジェクト取得失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log("loadProjects: レスポンスデータ", data);
+        projects = Array.isArray(data) ? data : [];
+        fetch(`${API_BASE}schedules`, { headers: getAuthHeaders() })
+          .then(res => {
+            if (!res.ok) throw new Error("スケジュール取得失敗: " + res.status);
+            return res.json();
+          })
+          .then(scheduleData => {
+            schedulesData = Array.isArray(scheduleData) ? scheduleData : [];
+            projects.forEach(project => {
+              project.status = updateProjectStatus(project);
+            });
+            let filteredProjects = projects;
+            if (searchText) {
+              filteredProjects = filteredProjects.filter(p => 
+                (p.name && p.name.toLowerCase().includes(searchText)) || 
+                (p.project_manager && p.project_manager.toLowerCase().includes(searchText))
+              );
+            }
+            if (statusFilter) {
+              filteredProjects = filteredProjects.filter(p => p.status === statusFilter);
+            }
+            const itemsPerPage = 10;
+            const start = (page - 1) * itemsPerPage;
+            const paginatedProjects = filteredProjects.slice(start, start + itemsPerPage);
+            const tbody = document.querySelector("#projectTable tbody");
+            tbody.innerHTML = "";
+            if (paginatedProjects.length === 0) {
+              tbody.innerHTML = "<tr><td colspan='11' class='text-center'>プロジェクトが見つかりません。</td></tr>";
+            } else {
+              paginatedProjects.forEach(project => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                  <td>${project.id || '-'}</td>
+                  <td>${project.name || '-'}</td>
+                  <td>${project.location || '-'}</td>
+                  <td>${project.building_type || '-'}</td>
+                  <td>${project.ground_floors || '-'}</td>
+                  <td>${project.basement_floors || '-'}</td>
+                  <td>${project.project_manager || '-'}</td>
+                  <td>${formatDate(project.start_date)}</td>
+                  <td>${formatDate(project.end_date)}</td>
+                  <td><span class="status-${project.status || '準備中'}">${project.status || '準備中'}</span></td>
+                  <td><button class="btn btn-sm btn-info view-details-btn" data-id="${project.id}">詳細</button></td>
+                `;
+                tbody.appendChild(tr);
+              });
+              document.querySelectorAll(".view-details-btn").forEach(btn => {
+                btn.addEventListener("click", function() {
+                  const projectId = this.getAttribute("data-id");
+                  showProjectDetails(projectId);
+                });
+              });
+            }
+            renderPagination(filteredProjects.length, itemsPerPage, page, "projectsPagination", loadProjects);
+          })
+          .catch(err => {
+            console.error("loadProjects: スケジュール取得エラー", err);
+            document.querySelector("#projectTable tbody").innerHTML = "<tr><td colspan='11'>スケジュールの取得に失敗</td></tr>";
+          });
+      })
+      .catch(err => {
+        console.error("loadProjects: エラー", err);
+        document.querySelector("#projectTable tbody").innerHTML = "<tr><td colspan='11'>プロジェクトの取得に失敗</td></tr>";
+      });
+  }
+
+  function renderPagination(totalItems, itemsPerPage, currentPage, paginationId, renderFunc) {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const pagination = document.getElementById(paginationId);
+    pagination.innerHTML = "";
+    if (totalPages <= 1) return;
+    const prevLi = document.createElement("li");
+    prevLi.className = "page-item" + (currentPage === 1 ? " disabled" : "");
+    prevLi.innerHTML = `<a class="page-link" href="#">«</a>`;
+    prevLi.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (currentPage > 1) renderFunc(currentPage - 1);
+    });
+    pagination.appendChild(prevLi);
+    for (let i = 1; i <= totalPages; i++) {
+      const li = document.createElement("li");
+      li.className = "page-item" + (i === currentPage ? " active" : "");
+      li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+      li.addEventListener("click", (e) => {
+        e.preventDefault();
+        renderFunc(i);
+      });
+      pagination.appendChild(li);
+    }
+    const nextLi = document.createElement("li");
+    nextLi.className = "page-item" + (currentPage === totalPages ? " disabled" : "");
+    nextLi.innerHTML = `<a class="page-link" href="#">»</a>`;
+    nextLi.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (currentPage < totalPages) renderFunc(currentPage + 1);
+    });
+    pagination.appendChild(nextLi);
+  }
+
+  function showProjectDetails(projectId) {
+    console.log("showProjectDetails: 詳細表示開始", { projectId });
+    const project = projects.find(p => p.id == projectId);
+    if (!project) {
+      console.error("showProjectDetails: プロジェクトが見つかりません", { projectId });
+      return;
+    }
+    currentProjectId = projectId;
+    project.status = updateProjectStatus(project);
+    document.getElementById("detailProjectName").textContent = project.name || '-';
+    document.getElementById("detailLocation").textContent = project.location || '-';
+    document.getElementById("detailBuildingSorry about that, something didn't go as planned. Please try again, and if you're still seeing this message, go ahead and restart the app.
+    <div id="main-content" class="w-100">
+      <div id="listView">
+        <h2>プロジェクト管理</h2>
+        <div class="d-flex search-area gap-2 mb-3">
+          <input type="text" id="searchInput" class="form-control" placeholder="プロジェクト名または担当者で検索" />
+          <select id="statusFilter" class="form-select" style="width:150px;">
+            <option value="">状態（すべて）</option>
+            <option value="準備中">準備中</option>
+            <option value="遅延中">遅延中</option>
+            <option value="進行中">進行中</option>
+            <option value="完了">完了</option>
+          </select>
+          <button id="filterBtn" class="btn btn-secondary"><i class="fas fa-filter"></i> フィルター</button>
+          <button id="exportCsvBtn" class="btn btn-outline-info">CSV出力</button>
+          <button id="addProjectBtn" class="btn btn-primary ms-auto" data-bs-toggle="modal" data-bs-target="#addProjectModal">
+            <i class="fas fa-plus"></i> 新規プロジェクト登録
+          </button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-striped" id="projectTable">
+            <thead>
+              <tr>
+                <th style="width: 5%;">ID</th>
+                <th style="width: 15%;">プロジェクト名</th>
+                <th style="width: 15%;">所在地</th>
+                <th style="width: 10%;">建物種別</th>
+                <th style="width: 8%;">地上階数</th>
+                <th style="width: 8%;">地下階数</th>
+                <th style="width: 10%;">担当者</th>
+                <th style="width: 10%;">開始日</th>
+                <th style="width: 10%;">完了日</th>
+                <th style="width: 8%;">状態</th>
+                <th style="width: 10%;">操作</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <nav>
+          <ul class="pagination" id="projectsPagination"></ul>
+        </nav>
+      </div>
+      <div id="detailView">
+        <button id="backToListBtn" class="btn btn-secondary mb-3" onclick="backToList()">
+          <i class="fas fa-arrow-left"></i> 一覧へ戻る
+        </button>
+        <div id="projectHeader" class="card mb-3">
+          <div class="card-body">
+            <h4>プロジェクト名: <span id="detailProjectName"></span></h4>
+            <p>所在地: <span id="detailLocation"></span></p>
+            <p>建物種別: <span id="detailBuildingType"></span></p>
+            <p>地上階数: <span id="detailGroundFloors"></span></p>
+            <p>地下階数: <span id="detailBasementFloors"></span></p>
+            <p>担当者: <span id="detailProjectManager"></span></p>
+            <p>開始日: <span id="detailStartDate"></span></p>
+            <p>完了日: <span id="detailEndDate"></span></p>
+            <p>状態: <span id="detailStatus" class="status"></span></p>
+            <div class="task-section">
+              <h5>本日のタスク</h5>
+              <div id="todayTasks">読み込み中...</div>
+              <h5 class="mt-3">遅延タスク</h5>
+              <div id="overdueTasks">読み込み中...</div>
+            </div>
+          </div>
+        </div>
+        <ul class="nav nav-tabs" id="detailTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders" type="button" role="tab">発注管理</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="reports-tab" data-bs-toggle="tab" data-bs-target="#reports" type="button" role="tab">施工報告</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="schedule-tab" data-bs-toggle="tab" data-bs-target="#schedule" type="button" role="tab">スケジュール管理</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" id="inventory-tab" data-bs-toggle="tab" data-bs-target="#inventory" type="button" role="tab">在庫管理</button>
+          </li>
+        </ul>
+        <div class="tab-content" id="detailTabsContent">
+          <div class="tab-pane fade show active" id="orders" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="ordersSearch" class="form-control" placeholder="資材名または取引先で検索" />
+              <select id="ordersStatusFilter" class="form-select" style="width:150px;">
+                <option value="">状態（すべて）</option>
+                <option value="発注済">発注済</option>
+                <option value="受領済">受領済</option>
+              </select>
+              <select id="ordersSort" class="form-select" style="width:150px;">
+                <option value="order_date_asc">発注日（昇順）</option>
+                <option value="order_date_desc">発注日（降順）</option>
+                <option value="delivery_date_asc">納品日（昇順）</option>
+                <option value="delivery_date_desc">納品日（降順）</option>
+              </select>
+            </div>
+            <div id="ordersContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>注文番号</th>
+                    <th>資材名</th>
+                    <th>取引先</th>
+                    <th>数量</th>
+                    <th>単価</th>
+                    <th>合計金額</th>
+                    <th>発注日</th>
+                    <th>納品日</th>
+                    <th>状態</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="ordersPagination"></ul>
+            </nav>
+          </div>
+          <div class="tab-pane fade" id="reports" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="reportsSearch" class="form-control" placeholder="報告内容または報告者で検索" />
+              <select id="reportsStatusFilter" class="form-select" style="width:150px;">
+                <option value="">状態（すべて）</option>
+                <option value="承諾">承諾</option>
+                <option value="却下">却下</option>
+                <option value="未処理">未処理</option>
+              </select>
+              <select id="reportsSort" class="form-select" style="width:150px;">
+                <option value="created_at_asc">報告日（昇順）</option>
+                <option value="created_at_desc">報告日（降順）</option>
+              </select>
+            </div>
+            <div id="reportsContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th style="width: 5%;">ID</th>
+                    <th style="width: 40%;">報告内容</th>
+                    <th style="width: 20%;">報告者</th>
+                    <th style="width: 20%;">報告日</th>
+                    <th style="width: 15%;">状態</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="reportsPagination"></ul>
+            </nav>
+          </div>
+          <div class="tab-pane fade" id="schedule" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="scheduleSearch" class="form-control" placeholder="タスク名または担当者で検索" />
+              <select id="scheduleStatusFilter" class="form-select" style="width:150px;">
+                <option value="">状態（すべて）</option>
+                <option value="未着手">未着手</option>
+                <option value="完了">完了</option>
+                <option value="遅延中">遅延中</option>
+              </select>
+              <select id="scheduleSort" class="form-select" style="width:150px;">
+                <option value="start_time_asc">開始日（昇順）</option>
+                <option value="start_time_desc">開始日（降順）</option>
+                <option value="end_time_asc">終了日（昇順）</option>
+                <option value="end_time_desc">終了日（降順）</option>
+              </select>
+            </div>
+            <div id="scheduleContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th style="width: 5%;">ID</th>
+                    <th style="width: 15%;">プロジェクト名</th>
+                    <th style="width: 20%;">タスク名</th>
+                    <th style="width: 15%;">担当者</th>
+                    <th style="width: 20%;">開始日時</th>
+                    <th style="width: 20%;">終了日時</th>
+                    <th style="width: 15%;">状態</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="schedulePagination"></ul>
+            </nav>
+          </div>
+          <div class="tab-pane fade" id="inventory" role="tabpanel">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="inventorySearch" class="form-control" placeholder="資材名または保管場所で検索" />
+              <select id="inventorySort" class="form-select" style="width:150px;">
+                <option value="quantity_asc">数量（昇順）</option>
+                <option value="quantity_desc">数量（降順）</option>
+              </select>
+            </div>
+            <div id="inventoryContent" class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>プロジェクト名</th>
+                    <th>資材名</th>
+                    <th>数量</th>
+                    <th>保管場所</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <nav>
+              <ul class="pagination" id="inventoryPagination"></ul>
+            </nav>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="addProjectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">新規プロジェクト登録</h5>
+          <button type="button" class="btn btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="newProjectForm">
+            <div class="mb-3">
+              <label for="newProjectName" class="form-label">プロジェクト名 <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="newProjectName" name="name" required>
+            </div>
+            <div class="mb-3">
+              <label for="newProjectLocation" class="form-label">所在地</label>
+              <input type="text" class="form-control" id="newProjectLocation" name="location">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectBuildingType" class="form-label">建物種別</label>
+              <input type="text" class="form-control" id="newProjectBuildingType" name="building_type">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectGroundFloors" class="form-label">地上階数</label>
+              <input type="number" class="form-control" id="newProjectGroundFloors" name="ground_floors" min="0">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectBasementFloors" class="form-label">地下階数</label>
+              <input type="number" class="form-control" id="newProjectBasementFloors" name="basement_floors" min="0">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectManager" class="form-label">担当者 <span class="text-danger">*</span></label>
+              <select class="form-select" id="newProjectManager" name="project_manager" multiple required>
+                <option value="">読み込み中...</option>
+              </select>
+              <small class="form-text text-muted">Ctrlキーを押しながらクリックで複数選択できます。</small>
+            </div>
+            <div class="mb-3">
+              <label for="newProjectStartDate" class="form-label">開始日</label>
+              <input type="date" class="form-control" id="newProjectStartDate" name="start_date">
+            </div>
+            <div class="mb-3">
+              <label for="newProjectEndDate" class="form-label">完了日</label>
+              <input type="date" class="form-control" id="newProjectEndDate" name="end_date">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" class="btn btn-primary" id="submitNewProjectBtn">登録</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/locales-all.global.min.js"></script>
+  <script src="https://cdn.dhtmlx.com/gantt/edge/dhtmlxGantt.js"></script>
+</body>
+<script>
+  const API_BASE = "http://127.0.0.1:8000/";
+  const authToken = localStorage.getItem("authToken") || "your-auth-token-here";
+  let projects = [];
+  let orders = [];
+  let reports = [];
+  let schedulesData = [];
+  let inventoryData = [];
+  let currentProjectId = null;
+  let projectMap = {};
+  let minStockLevels = {
+    "コンクリート": 100,
+    "鉄筋": 50,
+    "A-15": 20,
+    "www": 50,
+    "UK": 20,
+    "西中": 5,
+    "asdasdasdasdasd": 5,
+    "国回": 5,
+    "TEST": 20,
+    "U-1": 20,
+    "AFAFSAFA": 1000,
+    "北中": 50,
+    "2020": 100
+  };
+
+  const statusTranslations = {
+    "ordered": "発注済",
+    "Ordered": "発注済",
+    "received": "受領済",
+    "Received": "受領済",
+    "発注済": "発注済",
+    "受領済": "受領済",
+    "approved": "承諾",
+    "Approved": "承諾",
+    "rejected": "却下",
+    "Rejected": "却下",
+    "pending": "未処理",
+    "Pending": "未処理",
+    "承諾": "承諾",
+    "却下": "却下",
+    "未処理": "未処理",
+    "in progress": "進行中",
+    "In Progress": "進行中",
+    "not started": "未着手",
+    "Not Started": "未着手",
+    "completed": "完了",
+    "Completed": "完了",
+    "overdue": "遅延中",
+    "Overdue": "遅延中",
+    "未着手": "未着手",
+    "完了": "完了",
+    "遅延中": "遅延中"
+  };
+
+  function getAuthHeaders() {
+    return { "Authorization": "Bearer " + authToken, "Content-Type": "application/json" };
+  }
+
+  function formatDateTime(dateStr) {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return date.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return "-";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit" });
+  }
+
+  function translateStatus(status) {
+    if (!status) return "-";
+    const normalizedStatus = status.toLowerCase().replace(/_/g, " ");
+    const translated = statusTranslations[normalizedStatus] || statusTranslations[status] || status || "-";
+    console.log(`[DEBUG] 状態翻訳: ${status} -> ${translated}`);
+    return translated;
+  }
+
+  function updateProjectStatus(project) {
+    const now = new Date();
+    const startDate = project.start_date ? new Date(project.start_date) : null;
+    const endDate = project.end_date ? new Date(project.end_date) : null;
+
+    const overdueTasks = schedulesData.filter(s => 
+      s.project_id == project.id && 
+      new Date(s.end_time) < now && 
+      translateStatus(s.status) !== "完了"
+    );
+    if (overdueTasks.length > 0) {
+      return "遅延中";
+    }
+
+    if (!startDate || now < startDate) {
+      return "準備中";
+    }
+
+    const allTasksCompleted = schedulesData.every(s => 
+      s.project_id == project.id ? translateStatus(s.status) === "完了" : true
+    );
+    if (allTasksCompleted && endDate && now > endDate) {
+      return "完了";
+    }
+
+    return "進行中";
+  }
+
+  async function fetchProjectsForMapping() {
+    try {
+      const res = await fetch(API_BASE + "projects", { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("プロジェクト一覧の取得に失敗しました: " + await res.text());
+      const projects = await res.json();
+      projectMap = {};
+      projects.forEach(proj => {
+        projectMap[proj.id] = proj.name;
+      });
+      console.log("projectMap:", projectMap);
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    }
+  }
+
+  async function loadEmployees() {
+    console.log("loadEmployees: 従業員データロード開始");
+    try {
+      const res = await fetch(API_BASE + "registration/employees", { headers: getAuthHeaders() });
+      if (!res.ok) throw new Error("従業員一覧の取得に失敗しました: " + await res.text());
+      const employees = await res.json();
+      console.log("loadEmployees: 取得した従業員データ", employees);
+
+      const select = document.getElementById("newProjectManager");
+      select.innerHTML = "";
+
+      if (employees.length === 0) {
+        select.innerHTML = '<option value="">従業員が見つかりません</option>';
+      } else {
+        employees.forEach(employee => {
+          const option = document.createElement("option");
+          option.value = employee.name;
+          option.textContent = `${employee.name} (${employee.role || '役割未設定'})`;
+          select.appendChild(option);
+        });
+      }
+    } catch (err) {
+      console.error("loadEmployees: エラー", err);
+      document.getElementById("newProjectManager").innerHTML = '<option value="">従業員の取得に失敗しました</option>';
+    }
+  }
+  function loadProjects(page = 1) {
+    console.log("loadProjects: プロジェクトデータロード開始", { page });
+    const searchText = document.getElementById("searchInput").value.toLowerCase();
+    const statusFilter = document.getElementById("statusFilter").value;
+    fetch(API_BASE + "projects", { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error("プロジェクト取得失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log("loadProjects: レスポンスデータ", data);
+        projects = Array.isArray(data) ? data : [];
+        fetch(`${API_BASE}schedules`, { headers: getAuthHeaders() })
+          .then(res => {
+            if (!res.ok) throw new Error("スケジュール取得失敗: " + res.status);
+            return res.json();
+          })
+          .then(scheduleData => {
+            schedulesData = Array.isArray(scheduleData) ? scheduleData : [];
+            projects.forEach(project => {
+              project.status = updateProjectStatus(project);
+            });
+            let filteredProjects = projects;
+            if (searchText) {
+              filteredProjects = filteredProjects.filter(p => 
+                (p.name && p.name.toLowerCase().includes(searchText)) || 
+                (p.project_manager && p.project_manager.toLowerCase().includes(searchText))
+              );
+            }
+            if (statusFilter) {
+              filteredProjects = filteredProjects.filter(p => p.status === statusFilter);
+            }
+            const itemsPerPage = 10;
+            const start = (page - 1) * itemsPerPage;
+            const paginatedProjects = filteredProjects.slice(start, start + itemsPerPage);
+            const tbody = document.querySelector("#projectTable tbody");
+            tbody.innerHTML = "";
+            if (paginatedProjects.length === 0) {
+              tbody.innerHTML = "<tr><td colspan='11' class='text-center'>プロジェクトが見つかりません。</td></tr>";
+            } else {
+              paginatedProjects.forEach(project => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                  <td>${project.id || '-'}</td>
+                  <td>${project.name || '-'}</td>
+                  <td>${project.location || '-'}</td>
+                  <td>${project.building_type || '-'}</td>
+                  <td>${project.ground_floors || '-'}</td>
+                  <td>${project.basement_floors || '-'}</td>
+                  <td>${project.project_manager || '-'}</td>
+                  <td>${formatDate(project.start_date)}</td>
+                  <td>${formatDate(project.end_date)}</td>
+                  <td><span class="status-${project.status}">${project.status}</span></td>
+                  <td>
+                    <button class="btn btn-sm btn-info" onclick="showProjectDetail(${project.id})">詳細</button>
+                  </td>
+                `;
+                tbody.appendChild(tr);
+              });
+            }
+            updatePagination("projectsPagination", filteredProjects.length, itemsPerPage, page, loadProjects);
+          })
+          .catch(err => {
+            console.error("スケジュール取得エラー:", err);
+            alert("スケジュールの取得に失敗しました。");
+          });
+      })
+      .catch(err => {
+        console.error("プロジェクト取得エラー:", err);
+        alert("プロジェクトの取得に失敗しました。");
+      });
+  }
+
+  function updatePagination(paginationId, totalItems, itemsPerPage, currentPage, callback) {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const pagination = document.getElementById(paginationId);
+    pagination.innerHTML = "";
+    if (totalPages <= 1) return;
+
+    const prevLi = document.createElement("li");
+    prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+    prevLi.innerHTML = `<a class="page-link" href="#" onclick="event.preventDefault(); if(${currentPage} > 1) ${callback.name}(${currentPage - 1})">前</a>`;
+    pagination.appendChild(prevLi);
+
+    for (let i = 1; i <= totalPages; i++) {
+      const li = document.createElement("li");
+      li.className = `page-item ${i === currentPage ? 'active' : ''}`;
+      li.innerHTML = `<a class="page-link" href="#" onclick="event.preventDefault(); ${callback.name}(${i})">${i}</a>`;
+      pagination.appendChild(li);
+    }
+
+    const nextLi = document.createElement("li");
+    nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+    nextLi.innerHTML = `<a class="page-link" href="#" onclick="event.preventDefault(); if(${currentPage} < ${totalPages}) ${callback.name}(${currentPage + 1})">次</a>`;
+    pagination.appendChild(nextLi);
+  }
+
+  function showProjectDetail(projectId) {
+    console.log("showProjectDetail: 詳細表示開始", { projectId });
+    currentProjectId = projectId;
+    const project = projects.find(p => p.id === projectId);
+    if (!project) {
+      alert("プロジェクトが見つかりません。");
+      return;
+    }
+
+    document.getElementById("detailProjectName").textContent = project.name || '-';
+    document.getElementById("detailLocation").textContent = project.location || '-';
+    document.getElementById("detailBuildingType").textContent = project.building_type || '-';
+    document.getElementById("detailGroundFloors").textContent = project.ground_floors || '-';
+    document.getElementById("detailBasementFloors").textContent = project.basement_floors || '-';
+    document.getElementById("detailProjectManager").textContent = project.project_manager || '-';
+    document.getElementById("detailStartDate").textContent = formatDate(project.start_date);
+    document.getElementById("detailEndDate").textContent = formatDate(project.end_date);
+    document.getElementById("detailStatus").textContent = project.status || '-';
+    document.getElementById("detailStatus").className = `status status-${project.status}`;
+
+    document.getElementById("listView").style.display = "none";
+    document.getElementById("detailView").style.display = "block";
+
+    loadTodayTasks(projectId);
+    loadOverdueTasks(projectId);
+    loadOrders(1);
+    loadReports(1);
+    loadSchedules(1);
+    loadInventory(1);
+  }
+
+  function backToList() {
+    document.getElementById("listView").style.display = "block";
+    document.getElementById("detailView").style.display = "none";
+    currentProjectId = null;
+  }
+
+  function loadTodayTasks(projectId) {
+    const today = new Date().toISOString().split("T")[0];
+    const todayTasks = schedulesData.filter(s => 
+      s.project_id === projectId && 
+      s.start_time && s.start_time.split("T")[0] === today
+    );
+    const todayTasksDiv = document.getElementById("todayTasks");
+    todayTasksDiv.innerHTML = todayTasks.length === 0 
+      ? "本日のタスクはありません。"
+      : todayTasks.map(t => `<p>${t.task_name} (${translateStatus(t.status)})</p>`).join("");
+  }
+
+  function loadOverdueTasks(projectId) {
+    const now = new Date();
+    const overdueTasks = schedulesData.filter(s => 
+      s.project_id === projectId && 
+      new Date(s.end_time) < now && 
+      translateStatus(s.status) !== "完了"
+    );
+    const overdueTasksDiv = document.getElementById("overdueTasks");
+    overdueTasksDiv.innerHTML = overdueTasks.length === 0 
+      ? "遅延タスクはありません。"
+      : overdueTasks.map(t => `<p>${t.task_name} (終了予定: ${formatDateTime(t.end_time)})</p>`).join("");
+  }
+
+  function loadOrders(page = 1) {
+    console.log("loadOrders: 発注データロード開始", { page });
+    const searchText = document.getElementById("ordersSearch").value.toLowerCase();
+    const statusFilter = document.getElementById("ordersStatusFilter").value;
+    const sortOption = document.getElementById("ordersSort").value;
+
+    fetch(`${API_BASE}orders?project_id=${currentProjectId}`, { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error("発注データ取得失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        orders = Array.isArray(data) ? data : [];
+        let filteredOrders = orders;
+        if (searchText) {
+          filteredOrders = filteredOrders.filter(o => 
+            (o.material_name && o.material_name.toLowerCase().includes(searchText)) || 
+            (o.supplier && o.supplier.toLowerCase().includes(searchText))
+          );
+        }
+        if (statusFilter) {
+          filteredOrders = filteredOrders.filter(o => translateStatus(o.status) === statusFilter);
+        }
+        filteredOrders.sort((a, b) => {
+          if (sortOption === "order_date_asc") return new Date(a.order_date) - new Date(b.order_date);
+          if (sortOption === "order_date_desc") return new Date(b.order_date) - new Date(a.order_date);
+          if (sortOption === "delivery_date_asc") return new Date(a.delivery_date) - new Date(b.delivery_date);
+          if (sortOption === "delivery_date_desc") return new Date(b.delivery_date) - new Date(a.delivery_date);
+          return 0;
+        });
+
+        const itemsPerPage = 10;
+        const start = (page - 1) * itemsPerPage;
+        const paginatedOrders = filteredOrders.slice(start, start + itemsPerPage);
+        const tbody = document.querySelector("#ordersContent tbody");
+        tbody.innerHTML = "";
+        if (paginatedOrders.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='10' class='text-center'>発注データが見つかりません。</td></tr>";
+        } else {
+          paginatedOrders.forEach(order => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${order.id || '-'}</td>
+              <td>${order.order_number || '-'}</td>
+              <td>${order.material_name || '-'}</td>
+              <td>${order.supplier || '-'}</td>
+              <td>${order.quantity || '-'}</td>
+              <td>${order.unit_price || '-'}</td>
+              <td>${order.total_price || '-'}</td>
+              <td>${formatDate(order.order_date)}</td>
+              <td>${formatDate(order.delivery_date)}</td>
+              <td><span class="status-${translateStatus(order.status)}">${translateStatus(order.status)}</span></td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        updatePagination("ordersPagination", filteredOrders.length, itemsPerPage, page, loadOrders);
+      })
+      .catch(err => {
+        console.error("発注データ取得エラー:", err);
+        document.querySelector("#ordersContent tbody").innerHTML = "<tr><td colspan='10' class='text-center'>発注データの取得に失敗しました。</td></tr>";
+      });
+  }
+
+  function loadReports(page = 1) {
+    console.log("loadReports: 施工報告データロード開始", { page });
+    const searchText = document.getElementById("reportsSearch").value.toLowerCase();
+    const statusFilter = document.getElementById("reportsStatusFilter").value;
+    const sortOption = document.getElementById("reportsSort").value;
+
+    fetch(`${API_BASE}reports?project_id=${currentProjectId}`, { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error("施工報告データ取得失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        reports = Array.isArray(data) ? data : [];
+        let filteredReports = reports;
+        if (searchText) {
+          filteredReports = filteredReports.filter(r => 
+            (r.content && r.content.toLowerCase().includes(searchText)) || 
+            (r.reporter && r.reporter.toLowerCase().includes(searchText))
+          );
+        }
+        if (statusFilter) {
+          filteredReports = filteredReports.filter(r => translateStatus(r.status) === statusFilter);
+        }
+        filteredReports.sort((a, b) => {
+          if (sortOption === "created_at_asc") return new Date(a.created_at) - new Date(b.created_at);
+          if (sortOption === "created_at_desc") return new Date(b.created_at) - new Date(a.created_at);
+          return 0;
+        });
+
+        const itemsPerPage = 10;
+        const start = (page - 1) * itemsPerPage;
+        const paginatedReports = filteredReports.slice(start, start + itemsPerPage);
+        const tbody = document.querySelector("#reportsContent tbody");
+        tbody.innerHTML = "";
+        if (paginatedReports.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='5' class='text-center'>施工報告が見つかりません。</td></tr>";
+        } else {
+          paginatedReports.forEach(report => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${report.id || '-'}</td>
+              <td>${report.content || '-'}</td>
+              <td>${report.reporter || '-'}</td>
+              <td>${formatDateTime(report.created_at)}</td>
+              <td><span class="status-${translateStatus(report.status)}">${translateStatus(report.status)}</span></td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        updatePagination("reportsPagination", filteredReports.length, itemsPerPage, page, loadReports);
+      })
+      .catch(err => {
+        console.error("施工報告データ取得エラー:", err);
+        document.querySelector("#reportsContent tbody").innerHTML = "<tr><td colspan='5' class='text-center'>施工報告の取得に失敗しました。</td></tr>";
+      });
+  }
+
+  function loadSchedules(page = 1) {
+    console.log("loadSchedules: スケジュールデータロード開始", { page });
+    const searchText = document.getElementById("scheduleSearch").value.toLowerCase();
+    const statusFilter = document.getElementById("scheduleStatusFilter").value;
+    const sortOption = document.getElementById("scheduleSort").value;
+
+    fetch(`${API_BASE}schedules?project_id=${currentProjectId}`, { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error("スケジュールデータ取得失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        schedulesData = Array.isArray(data) ? data : [];
+        let filteredSchedules = schedulesData;
+        if (searchText) {
+          filteredSchedules = filteredSchedules.filter(s => 
+            (s.task_name && s.task_name.toLowerCase().includes(searchText)) || 
+            (s.assigned_to && s.assigned_to.toLowerCase().includes(searchText))
+          );
+        }
+        if (statusFilter) {
+          filteredSchedules = filteredSchedules.filter(s => translateStatus(s.status) === statusFilter);
+        }
+        filteredSchedules.sort((a, b) => {
+          if (sortOption === "start_time_asc") return new Date(a.start_time) - new Date(b.start_time);
+          if (sortOption === "start_time_desc") return new Date(b.start_time) - new Date(a.start_time);
+          if (sortOption === "end_time_asc") return new Date(a.end_time) - new Date(b.end_time);
+          if (sortOption === "end_time_desc") return new Date(b.end_time) - new Date(a.end_time);
+          return 0;
+        });
+
+        const itemsPerPage = 10;
+        const start = (page - 1) * itemsPerPage;
+        const paginatedSchedules = filteredSchedules.slice(start, start + itemsPerPage);
+        const tbody = document.querySelector("#scheduleContent tbody");
+        tbody.innerHTML = "";
+        if (paginatedSchedules.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='7' class='text-center'>スケジュールが見つかりません。</td></tr>";
+        } else {
+          paginatedSchedules.forEach(schedule => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${schedule.id || '-'}</td>
+              <td>${projectMap[schedule.project_id] || '-'}</td>
+              <td>${schedule.task_name || '-'}</td>
+              <td>${schedule.assigned_to || '-'}</td>
+              <td>${formatDateTime(schedule.start_time)}</td>
+              <td>${formatDateTime(schedule.end_time)}</td>
+              <td><span class="status-${translateStatus(schedule.status)}">${translateStatus(schedule.status)}</span></td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        updatePagination("schedulePagination", filteredSchedules.length, itemsPerPage, page, loadSchedules);
+      })
+      .catch(err => {
+        console.error("スケジュールデータ取得エラー:", err);
+        document.querySelector("#scheduleContent tbody").innerHTML = "<tr><td colspan='7' class='text-center'>スケジュールの取得に失敗しました。</td></tr>";
+      });
+  }
+
+  function loadInventory(page = 1) {
+    console.log("loadInventory: 在庫データロード開始", { page });
+    const searchText = document.getElementById("inventorySearch").value.toLowerCase();
+    const sortOption = document.getElementById("inventorySort").value;
+
+    fetch(`${API_BASE}inventory?project_id=${currentProjectId}`, { headers: getAuthHeaders() })
+      .then(res => {
+        if (!res.ok) throw new Error("在庫データ取得失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        inventoryData = Array.isArray(data) ? data : [];
+        let filteredInventory = inventoryData;
+        if (searchText) {
+          filteredInventory = filteredInventory.filter(i => 
+            (i.material_name && i.material_name.toLowerCase().includes(searchText)) || 
+            (i.storage_location && i.storage_location.toLowerCase().includes(searchText))
+          );
+        }
+        filteredInventory.sort((a, b) => {
+          if (sortOption === "quantity_asc") return a.quantity - b.quantity;
+          if (sortOption === "quantity_desc") return b.quantity - a.quantity;
+          return 0;
+        });
+
+        const itemsPerPage = 10;
+        const start = (page - 1) * itemsPerPage;
+        const paginatedInventory = filteredInventory.slice(start, start + itemsPerPage);
+        const tbody = document.querySelector("#inventoryContent tbody");
+        tbody.innerHTML = "";
+        if (paginatedInventory.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='4' class='text-center'>在庫データが見つかりません。</td></tr>";
+        } else {
+          paginatedInventory.forEach(item => {
+            const tr = document.createElement("tr");
+            const isLowStock = minStockLevels[item.material_name] && item.quantity < minStockLevels[item.material_name];
+            tr.className = isLowStock ? "highlight-red" : "";
+            tr.innerHTML = `
+              <td>${projectMap[item.project_id] || '-'}</td>
+              <td>${item.material_name || '-'}</td>
+              <td>${item.quantity || '-'}</td>
+              <td>${item.storage_location || '-'}</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+        updatePagination("inventoryPagination", filteredInventory.length, itemsPerPage, page, loadInventory);
+      })
+      .catch(err => {
+        console.error("在庫データ取得エラー:", err);
+        document.querySelector("#inventoryContent tbody").innerHTML = "<tr><td colspan='4' class='text-center'>在庫データの取得に失敗しました。</td></tr>";
+      });
+  }
+  function submitNewProject() {
+    console.log("submitNewProject: 新規プロジェクト登録開始");
+    const form = document.getElementById("newProjectForm");
+    const formData = new FormData(form);
+    const projectData = {
+      name: formData.get("name"),
+      location: formData.get("location") || null,
+      building_type: formData.get("building_type") || null,
+      ground_floors: formData.get("ground_floors") ? parseInt(formData.get("ground_floors")) : null,
+      basement_floors: formData.get("basement_floors") ? parseInt(formData.get("basement_floors")) : null,
+      project_manager: Array.from(document.getElementById("newProjectManager").selectedOptions).map(option => option.value).join(", "),
+      start_date: formData.get("start_date") || null,
+      end_date: formData.get("end_date") || null
+    };
+
+    if (!projectData.name || !projectData.project_manager) {
+      alert("プロジェクト名と担当者は必須です。");
+      return;
+    }
+
+    const modal = bootstrap.Modal.getInstance(document.getElementById("addProjectModal"));
+
+    fetch(API_BASE + "projects", {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(projectData)
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("プロジェクト登録失敗: " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        console.log("submitNewProject: 登録成功", data);
+        alert("プロジェクトが正常に登録されました。");
+        form.reset();
+        modal.hide(); // 成功時にモーダルを閉じる
+        loadProjects();
+      })
+      .catch(err => {
+        console.error("submitNewProject: エラー", err);
+        alert("プロジェクトの登録に失敗しました: " + err.message);
+        modal.hide(); // エラー時にもモーダルを閉じる
+      });
+  }
+  function exportToCsv() {
+    const headers = ["ID", "プロジェクト名", "所在地", "建物種別", "地上階数", "地下階数", "担当者", "開始日", "完了日", "状態"];
+    const rows = projects.map(p => [
+      p.id || '-',
+      p.name || '-',
+      p.location || '-',
+      p.building_type || '-',
+      p.ground_floors || '-',
+      p.basement_floors || '-',
+      p.project_manager || '-',
+      formatDate(p.start_date),
+      formatDate(p.end_date),
+      p.status || '-'
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "projects.csv";
+    link.click();
+  }
+
+  document.getElementById("logoutBtn").addEventListener("click", () => {
+    localStorage.removeItem("authToken");
+    window.location.href = "/login.html";
+  });
+
+  document.getElementById("filterBtn").addEventListener("click", () => loadProjects(1));
+  document.getElementById("exportCsvBtn").addEventListener("click", exportToCsv);
+  document.getElementById("submitNewProjectBtn").addEventListener("click", submitNewProject);
+
+  document.getElementById("searchInput").addEventListener("input", () => loadProjects(1));
+  document.getElementById("statusFilter").addEventListener("change", () => loadProjects(1));
+
+  document.getElementById("ordersSearch").addEventListener("input", () => loadOrders(1));
+  document.getElementById("ordersStatusFilter").addEventListener("change", () => loadOrders(1));
+  document.getElementById("ordersSort").addEventListener("change", () => loadOrders(1));
+
+  document.getElementById("reportsSearch").addEventListener("input", () => loadReports(1));
+  document.getElementById("reportsStatusFilter").addEventListener("change", () => loadReports(1));
+  document.getElementById("reportsSort").addEventListener("change", () => loadReports(1));
+
+  document.getElementById("scheduleSearch").addEventListener("input", () => loadSchedules(1));
+  document.getElementById("scheduleStatusFilter").addEventListener("change", () => loadSchedules(1));
+  document.getElementById("scheduleSort").addEventListener("change", () => loadSchedules(1));
+
+  document.getElementById("inventorySearch").addEventListener("input", () => loadInventory(1));
+  document.getElementById("inventorySort").addEventListener("change", () => loadInventory(1));
+
+  document.addEventListener("DOMContentLoaded", () => {
+    console.log("DOMContentLoaded: 初期化開始");
+    loadCompanyInfo();
+    loadProjects();
+    fetchProjectsForMapping();
+    loadEmployees();
+  });
+</script>
+</html>

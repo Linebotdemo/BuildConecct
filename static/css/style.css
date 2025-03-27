@@ -1,0 +1,19 @@
+/* css/style.css */
+body {
+  background-color: #f8f9fa;
+  margin: 0; /* リセットしたい場合 */
+  padding: 0;
+}
+
+#sidebar .nav-link {
+  margin-bottom: 1rem;
+  color: #fff;
+}
+
+#sidebar .nav-link.active,
+#sidebar .nav-link:hover {
+  background-color: #495057;
+  border-radius: 0.25rem;
+}
+
+/* 必要に応じて追加のスタイルをここに */

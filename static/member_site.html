@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>BuildConnect 会員ダッシュボード</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <style>
+    body { background-color: #f8f9fa; }
+    /* ヘッダー */
+    #header { background-color: #343a40; color: #fff; padding: 10px 20px; }
+    /* サイドバー */
+    #sidebar { width: 240px; background-color: #495057; min-height: 100vh; padding-top: 20px; }
+    #sidebar .nav-link { color: #fff; margin: 5px 0; cursor: pointer; }
+    #sidebar .nav-link:hover, #sidebar .nav-link.active { background-color: #6c757d; border-radius: 4px; padding-left: 10px; }
+    /* メインコンテンツ */
+    #main-content { margin-left: 240px; padding: 20px; }
+  </style>
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header id="header" class="d-flex justify-content-between align-items-center">
+    <h3>BuildConnect 会員サイト</h3>
+    <div>
+      <button class="btn btn-outline-light me-2" data-bs-toggle="modal" data-bs-target="#loginModal">
+        <i class="fas fa-sign-in-alt"></i> ログイン
+      </button>
+      <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#registerModal">
+        <i class="fas fa-user-plus"></i> 会員登録
+      </button>
+    </div>
+  </header>
+
+  <div class="d-flex">
+    <!-- サイドバー -->
+    <nav id="sidebar" class="p-3">
+      <ul class="nav flex-column">
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('project_management.html', this)">
+            <i class="fas fa-clipboard-list"></i> プロジェクト管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('reports_page_extension.html', this)">
+            <i class="fas fa-file-alt"></i> 施工報告
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('schedule_management.html', this)">
+            <i class="fas fa-calendar-alt"></i> スケジュール管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('order_management.html', this)">
+            <i class="fas fa-truck"></i> 発注管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('talent_matching.html', this)">
+            <i class="fas fa-user-friends"></i> 人材マッチング
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('ma_support.html', this)">
+            <i class="fas fa-handshake"></i> M&amp;A支援
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('inventory_management.html', this)">
+            <i class="fas fa-boxes"></i> 資材在庫管理
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="loadContent('ai_analysis.html', this)">
+            <i class="fas fa-robot"></i> AI解析・データ分析
+          </a>
+        </li>
+      </ul>
+    </nav>
+    <!-- メインコンテンツ（Ajaxで読み込むエリア） -->
+    <div id="main-content" class="w-100">
+      <!-- 初期表示コンテンツ -->
+      <div id="contentArea"></div>
+    </div>
+  </div>
+
+  <!-- jQuery (Ajax用) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function loadContent(url, el) {
+      // サイドバーの全リンクから.activeを削除
+      $('#sidebar .nav-link').removeClass('active');
+      // クリックされたリンクに.activeを追加
+      $(el).addClass('active');
+      // Ajaxでコンテンツを取得して#contentAreaに挿入
+      $.ajax({
+        url: url,
+        method: 'GET',
+        dataType: 'html',
+        success: function(data) {
+          $('#contentArea').html(data);
+        },
+        error: function() {
+          $('#contentArea').html('<p>コンテンツの読み込みに失敗しました。</p>');
+        }
+      });
+    }
+    // ページ読み込み時に初期コンテンツを表示
+    $(document).ready(function(){
+      loadContent('project_management.html', $('#sidebar .nav-link').first());
+    });
+  </script>
+  <!-- ログイン/会員登録用モーダル（必要に応じて追加してください） -->
+  <!-- 例: loginModal.html, registerModal.html -->
+</body>
+</html>
