@@ -214,7 +214,7 @@
               </div>
               <div class="mb-3">
                 <label for="deliveryDate" class="form-label">納品日</label>
-                <input type="date" class="form-control" id="deliveryDate"> <!-- 修正箇所 -->
+                <input type="date" class="form-control" id="deliveryDate">
               </div>
               <div class="mb-3">
                 <label for="orderPerson" class="form-label">担当者名</label>
@@ -404,7 +404,10 @@
         updateEditTotalPrice();
       });
       document.getElementById("editOrderQuantity").addEventListener("input", updateEditTotalPrice);
-    
+
+      // ボタンイベントリスナーをここで一度だけ設定
+      setupButtonListeners();
+
       try {
         await Promise.all([
           fetchProjectsForOrderSelect(),
@@ -420,6 +423,24 @@
         alert("初期化中にエラーが発生しました: " + err.message);
       }
     });
+
+    function setupButtonListeners() {
+      console.log("[DEBUG] Setting up button listeners...");
+      const receiveButtons = document.querySelectorAll('.receive-btn');
+      const editButtons = document.querySelectorAll('.edit-btn');
+      
+      receiveButtons.forEach(btn => {
+        btn.removeEventListener('click', handleReceiveClick); // 重複防止
+        btn.addEventListener('click', handleReceiveClick);
+        console.log("[DEBUG] Added listener to receive-btn, orderId:", btn.getAttribute('data-order-id'));
+      });
+      
+      editButtons.forEach(btn => {
+        btn.removeEventListener('click', handleEditClick); // 重複防止
+        btn.addEventListener('click', handleEditClick);
+        console.log("[DEBUG] Added listener to edit-btn, orderId:", btn.getAttribute('data-order-id'));
+      });
+    }
     
     function parseJwt(token) {
       try {
@@ -1059,6 +1080,7 @@
         currentPage = 1;
         allOrders.sort((a, b) => b.id - a.id);
         renderOrderTable(allOrders);
+        setupButtonListeners(); // データロード後にリスナーを再設定
       } catch (err) {
         console.error("[DEBUG] loadOrders() エラー:", err);
         alert(err.message);
@@ -1105,17 +1127,6 @@
           </td>
         `;
         tbody.appendChild(tr);
-      });
-
-      document.querySelectorAll('.receive-btn').forEach(btn => {
-        btn.removeEventListener('click', handleReceiveClick);
-        btn.addEventListener('click', handleReceiveClick);
-        console.log("[DEBUG] Added event listener to receive-btn, orderId:", btn.getAttribute('data-order-id'));
-      });
-      document.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.removeEventListener('click', handleEditClick);
-        btn.addEventListener('click', handleEditClick);
-        console.log("[DEBUG] Added event listener to edit-btn, orderId:", btn.getAttribute('data-order-id'));
       });
 
       renderPagination(orders.length);
