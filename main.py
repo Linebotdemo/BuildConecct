@@ -917,15 +917,15 @@ def get_db():
         db.close()
 
 origins = [
-    "https://buildconnect.onrender.com",  # ← あなたのフロントエンドURLに変更！
+    "https://buildconect.onrender.com",  # ← あなたのフロントエンドURLに変更！
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://buildconnect.onrender.com"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],           # 全メソッドを許可（GET, POST など）
-    allow_headers=["*"],           # 全ヘッダーを許可
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(RequestValidationError)
