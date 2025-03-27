@@ -12,6 +12,7 @@ import json
 import textwrap
 from datetime import datetime as dt, date, timezone
 from typing import Optional, List
+from fastapi.middleware.cors import CORSMiddleware
 
 # FastAPI 関連
 from fastapi import FastAPI, Depends, HTTPException, Form, WebSocket, WebSocketDisconnect, Request, APIRouter
@@ -914,6 +915,17 @@ def get_db():
         yield db
     finally:
         db.close()
+
+origins = [
+    "https://buildconnect.onrender.com",  # ← あなたのフロントエンドURLに変更！
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,         # フロントエンドのURLを許可
+    allow_credentials=True,
+    allow_methods=["*"],           # 全メソッドを許可（GET, POST など）
+    allow_headers=["*"],           # 全ヘッダーを許可
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
