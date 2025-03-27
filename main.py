@@ -926,6 +926,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],           # 全メソッドを許可（GET, POST など）
     allow_headers=["*"],           # 全ヘッダーを許可
+)
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
