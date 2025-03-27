@@ -922,7 +922,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,         # フロントエンドのURLを許可
+    allow_origins=["https://buildconnect.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],           # 全メソッドを許可（GET, POST など）
     allow_headers=["*"],           # 全ヘッダーを許可
