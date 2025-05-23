@@ -20,7 +20,8 @@ from typing import Optional
 import aiohttp
 import xml.etree.ElementTree as ET
 import uuid
-
+from fastapi.responses import JSONResponse
+import httpx
 app = FastAPI()
 
 YAHOO_APPID = os.getenv("YAHOO_APPID")
@@ -574,6 +575,20 @@ async def geocode_address(address: str):
         raise HTTPException(status_code=404, detail=f"Geocode failed: {msg}")
     lon, lat = map(float, data["Feature"][0]["Geometry"]["Coordinates"].split(","))
     return {"lat": lat, "lon": lon}
+
+@app.get("/proxy")
+async def proxy(url: str):
+    try:
+        resp = await client.get(url, timeout=10.0)
+        resp.raise_for_status()
+        return JSONResponse(status_code=200, content=resp.json())
+    except httpx.HTTPError as e:
+        # JSON エラー応答に統一
+        return JSONResponse(
+            status_code=502,
+            content={"error": "Upstream fetch failed", "detail": str(e)}
+        )
+
 
 @app.get("/api/shelters")
 def list_shelters(status: Optional[str] = Query(None, regex="^(open|closed)$")):

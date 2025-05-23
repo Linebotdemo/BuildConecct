@@ -433,17 +433,17 @@ async function fetchAlerts() {
     return;
   }
 
-  // ① 都道府県コードを取得（ここは固定 or 逆ジオで動的に）
-  const prefCode = '08';  // とりあえず茨城県
-
-  // ② サーバー側プロキシ経由で気象庁 JSON をフェッチ
+  const prefCode = '08';   // とりあえず茨城県
   const url = `https://www.jma.go.jp/bosai/hazard/data/warning/${prefCode}.json`;
+
   try {
     const res = await fetch(`/proxy?url=${encodeURIComponent(url)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    console.log('⚡️ [fetchAlerts] HTTP status:', res.status, res.url);
     const j = await res.json();
-    const alerts = j.warning || [];
+    console.log('⚡️ [fetchAlerts] raw JMA JSON:', j);
 
+    const alerts = j.warning || [];
+    console.log(`⚡️ [fetchAlerts] parsed alerts (${alerts.length} 件)`, alerts);
     // ③ polygon の重心を計算し、30km以内だけフィルタ
     const nearby = alerts.filter(a => {
       if (!a.polygon) return false;
