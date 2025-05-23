@@ -23,6 +23,7 @@ import uuid
 from fastapi.responses import JSONResponse
 import httpx
 app = FastAPI()
+client = httpx.AsyncClient()
 
 YAHOO_APPID = os.getenv("YAHOO_APPID")
 
