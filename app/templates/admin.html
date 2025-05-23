@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>避難所管理 - 日本版 Smart Shelter</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+</head>
+<body>
+  <div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1>避難所管理</h1>
+      <a href="/" class="btn btn-secondary">市民画面へ</a>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" id="adminTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="shelters-tab" data-bs-toggle="tab" data-bs-target="#shelters" type="button" role="tab">避難所管理</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">監査ログ</button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="adminTabContent">
+      <!-- 避難所管理タブ -->
+      <div class="tab-pane fade show active" id="shelters" role="tabpanel">
+        <div class="card mb-4">
+          <div class="card-header">新しい避難所を追加</div>
+          <div class="card-body">
+            <form id="add-shelter-form">
+              <!-- 基本情報 -->
+              <div class="mb-3">
+                <label class="form-label">名前</label>
+                <input type="text" name="name" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">住所</label>
+                <input type="text" name="address" class="form-control" required onblur="updateAdminMapPin(0, this.value)">
+              </div>
+              <input type="hidden" name="latitude">
+              <input type="hidden" name="longitude">
+              <div class="row mb-3">
+                <div class="col">
+                  <label class="form-label">定員</label>
+                  <input type="number" name="capacity" class="form-control" required>
+                </div>
+                <div class="col">
+                  <label class="form-label">現在利用人数</label>
+                  <input type="number" name="current_occupancy" class="form-control" required>
+                </div>
+              </div>
+              <!-- 属性 -->
+              <div class="mb-3">
+                <label class="form-label">施設属性</label><br>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="pets_allowed" id="pets_allowed">
+                  <label class="form-check-label" for="pets_allowed">ペット可</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="barrier_free" id="barrier_free">
+                  <label class="form-check-label" for="barrier_free">バリアフリー</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="toilet_available" id="toilet_available">
+                  <label class="form-check-label" for="toilet_available">トイレ</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="food_available" id="food_available">
+                  <label class="form-check-label" for="food_available">食料提供</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="medical_available" id="medical_available">
+                  <label class="form-check-label" for="medical_available">医療対応</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="wifi_available" id="wifi_available">
+                  <label class="form-check-label" for="wifi_available">Wi-Fi</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="checkbox" name="charging_available" id="charging_available">
+                  <label class="form-check-label" for="charging_available">充電設備</label>
+                </div>
+              </div>
+              <!-- 運営情報 -->
+              <div class="row mb-3">
+                <div class="col">
+                  <label class="form-label">連絡先</label>
+                  <input type="text" name="contact" class="form-control">
+                </div>
+                <div class="col">
+                  <label class="form-label">運営団体</label>
+                  <input type="text" name="operator" class="form-control">
+                </div>
+              </div>
+              <div class="row mb-3">
+                <div class="col">
+                  <label class="form-label">開設日時</label>
+                  <input type="datetime-local" name="opened_at" class="form-control">
+                </div>
+                <div class="col">
+                  <label class="form-label">状態</label>
+                  <select name="status" class="form-select">
+                    <option value="open">開設中</option>
+                    <option value="closed">閉鎖</option>
+                  </select>
+                </div>
+              </div>
+              <!-- 写真 -->
+              <div class="mb-3">
+                <label class="form-label">写真アップロード</label>
+                <input type="file" name="photo" accept="image/*" class="form-control">
+              </div>
+              <button type="submit" class="btn btn-primary">追加</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <h2>避難所マップ</h2>
+          <div id="admin-map" style="height:400px;"></div>
+        </div>
+
+        <div class="mb-4">
+          <h2>避難所一覧</h2>
+          <div class="d-flex mb-2">
+            <select id="bulk-status" class="form-select me-2" style="width:auto;">
+              <option value="">状態を選択</option>
+              <option value="open">開設中</option>
+              <option value="closed">閉鎖</option>
+            </select>
+            <input type="number" id="bulk-occupancy" class="form-control me-2" placeholder="利用人数" style="width:120px;">
+            <button class="btn btn-outline-primary me-2" onclick="bulkUpdate()">一括更新</button>
+            <button class="btn btn-outline-danger" onclick="bulkDelete()">一括削除</button>
+          </div>
+          <div id="admin-shelter-list"></div>
+        </div>
+      </div>
+
+      <!-- 監査ログタブ -->
+      <div class="tab-pane fade" id="logs" role="tabpanel">
+        <h2>監査ログ</h2>
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>アクション</th>
+              <th>避難所ID</th>
+              <th>ユーザー</th>
+              <th>日時</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs %}
+            <tr>
+              <td>{{ log.action }}</td>
+              <td>{{ log.shelter_id or 'N/A' }}</td>
+              <td>{{ log.user }}</td>
+              <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSライブラリ読み込み -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    const token = '{{ token }}';
+    const apiUrl = '{{ api_url }}';
+    const wsUrl  = '{{ ws_url }}';
+    let adminMap, adminMarkers = {};
+
+    // ページ初期化
+    document.addEventListener('DOMContentLoaded', () => {
+      initAdminMap();
+      fetchShelters();
+      const ws = new WebSocket(wsUrl + '?token=' + token);
+      ws.onmessage = () => fetchShelters();
+    });
+
+    // マップ初期化
+    function initAdminMap() {
+      adminMap = L.map('admin-map').setView([35.6762, 139.6503], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminMap);
+    }
+
+    // 住所から緯度経度を取得（YahooジオコーディングAPI）
+    async function updateAdminMapPin(id, address) {
+      const appId = 'YOUR_YAHOO_APP_ID';  // ご自身の App ID に置き換えてください
+      const url = `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${appId}&query=${encodeURIComponent(address)}&output=json`;
+      try {
+        const res  = await fetch(url);
+        const json = await res.json();
+        if (json.Feature && json.Feature.length) {
+          const [lon, lat] = json.Feature[0].Geometry.Coordinates.split(',');
+          document.querySelector('input[name="latitude"]').value  = lat;
+          document.querySelector('input[name="longitude"]').value = lon;
+          let marker = adminMarkers[id];
+          if (!marker) {
+            marker = L.marker([lat, lon]).addTo(adminMap);
+            adminMarkers[id] = marker;
+          } else {
+            marker.setLatLng([lat, lon]);
+          }
+          adminMap.flyTo([lat, lon], 14);
+        }
+      } catch (err) {
+        console.error('ジオコーディングエラー:', err);
+      }
+    }
+
+    // サーバーから避難所一覧を取得してリストとマーカーを更新
+    async function fetchShelters() {
+      const res = await fetch(apiUrl + '/shelters', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) return alert('避難所取得エラー');
+      const list = await res.json();
+      // リスト描画
+      const container = document.getElementById('admin-shelter-list');
+      container.innerHTML = list.map(s => `
+        <div class="card mb-2 shelter" data-id="${s.id}">
+          <div class="card-body">
+            <input type="checkbox" class="form-check-input shelter-checkbox me-2" value="${s.id}">
+            <strong>${s.name}</strong> (${s.status}, ${s.current_occupancy}/${s.capacity})
+            <button class="btn btn-sm btn-outline-primary float-end me-1" onclick="editForm(${s.id})">編集</button>
+            <button class="btn btn-sm btn-outline-danger float-end" onclick="deleteShelter(${s.id})">削除</button>
+          </div>
+        </div>
+      `).join('');
+      // マーカー更新
+      Object.values(adminMarkers).forEach(m => adminMap.removeLayer(m));
+      adminMarkers = {};
+      list.forEach(s => {
+        const m = L.marker([s.latitude, s.longitude]).addTo(adminMap)
+          .bindPopup(`${s.name}<br>${s.address}`);
+        adminMarkers[s.id] = m;
+      });
+    }
+
+    // 新規追加フォーム送信
+    document.getElementById('add-shelter-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const payload = {
+        name:              fd.get('name'),
+        address:           fd.get('address'),
+        latitude:          +fd.get('latitude')  || 35.6762,
+        longitude:         +fd.get('longitude') || 139.6503,
+        capacity:          +fd.get('capacity'),
+        current_occupancy: +fd.get('current_occupancy'),
+        attributes: {
+          pets_allowed:       fd.get('pets_allowed')     === 'on',
+          barrier_free:       fd.get('barrier_free')     === 'on',
+          toilet_available:   fd.get('toilet_available') === 'on',
+          food_available:     fd.get('food_available')   === 'on',
+          medical_available:  fd.get('medical_available')=== 'on',
+          wifi_available:     fd.get('wifi_available')   === 'on',
+          charging_available: fd.get('charging_available')==='on'
+        },
+        photos: [],  // ← 空でも必ず含める
+        contact:    fd.get('contact'),
+        operator:   fd.get('operator'),
+        opened_at:  fd.get('opened_at')
+                       ? new Date(fd.get('opened_at')).toISOString()
+                       : new Date().toISOString(),
+        status:     fd.get('status')
+      };
+      console.log("🚀 payload:", JSON.stringify(payload, null, 2));
+
+      const res = await fetch(apiUrl + '/shelters', {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type':  'application/json'
+        },
+        body:    JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        console.error('Create shelter failed', await res.json());
+        return alert(`追加に失敗しました (${res.status})`);
+      }
+
+      // 写真アップロード
+      const s = await res.json();
+      const photo = fd.get('photo');
+      if (photo && photo.size) {
+        const pfd = new FormData();
+        pfd.append('shelter_id', s.id);
+        pfd.append('file', photo);
+        await fetch(apiUrl + '/shelters/upload-photo', {
+          method:  'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body:    pfd
+        });
+      }
+
+      e.target.reset();
+      fetchShelters();
+    });
+
+    // 編集ボタン
+    function editForm(id) {
+      location.href = `/admin/shelters/${id}/edit`;
+    }
+
+    // 単一削除
+    async function deleteShelter(id) {
+      if (!confirm('削除しますか？')) return;
+      const res = await fetch(`${apiUrl}/shelters/${id}`, {
+        method:  'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        fetchShelters();
+      } else {
+        alert('削除に失敗しました');
+      }
+    }
+
+    // 一括更新
+    async function bulkUpdate() {
+      const ids = Array.from(document.querySelectorAll('.shelter-checkbox:checked')).map(cb => +cb.value);
+      if (!ids.length) return alert('避難所を選択してください');
+      const status = document.getElementById('bulk-status').value;
+      const occ    = document.getElementById('bulk-occupancy').value;
+      if (!status && !occ) return alert('更新内容を指定してください');
+
+      const body = { shelter_ids: ids };
+      if (status) body.status = status;
+      if (occ)    body.current_occupancy = +occ;
+
+      const res = await fetch(apiUrl + '/shelters/bulk-update', {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type':  'application/json'
+        },
+        body:    JSON.stringify(body)
+      });
+
+      if (res.ok) fetchShelters();
+      else        alert('一括更新に失敗しました');
+    }
+
+    // 一括削除
+    async function bulkDelete() {
+      const ids = Array.from(document.querySelectorAll('.shelter-checkbox:checked')).map(cb => +cb.value);
+      if (!ids.length) return alert('避難所を選択してください');
+      if (!confirm('選択した避難所を削除しますか？')) return;
+
+      const res = await fetch(apiUrl + '/shelters/bulk-delete', {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type':  'application/json'
+        },
+        body:    JSON.stringify(ids)
+      });
+
+      if (res.ok) fetchShelters();
+      else        alert('一括削除に失敗しました');
+    }
+  </script>
+</body>
+</html>

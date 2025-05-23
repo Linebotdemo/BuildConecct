@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=local
+      - API_URL=http://backend:8000
+      - WS_URL=ws://backend:8000/ws/shelters
+    volumes:
+      - ./backend/shelter.db:/app/shelter.db
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - API_URL=http://backend:8000
+      - WS_URL=ws://backend:8000/ws/shelters
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

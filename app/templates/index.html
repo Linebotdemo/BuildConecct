@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>日本版 Smart Shelter</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
+  <!-- Bootstrap CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  />
+
+  <!-- カスタム CSS -->
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+<body>
+  <div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1>日本版 Smart Shelter</h1>
+      <a href="/login" class="btn btn-outline-primary">自治体用ログイン</a>
+    </div>
+
+    <!-- 検索 -->
+    <div class="mb-4">
+      <h2>避難所検索</h2>
+      <input
+        type="text"
+        id="search"
+        placeholder="避難所名、住所、キーワードで検索"
+        oninput="fetchShelters()"
+        class="form-control"
+      />
+    </div>
+
+    <!-- 災害警報 -->
+    <div class="mb-4">
+      <h3>災害警報</h3>
+      <div id="alert-section" class="alert-section">
+        {% if alerts %}
+          {% for alert in alerts %}
+            <div class="alert-item {{ alert.level | lower }}">
+              {{ alert.area }}: {{ alert.warning_type }} — {{ alert.description }}
+              (発行: {{ alert.issued_at }})
+            </div>
+          {% endfor %}
+        {% else %}
+          <p>警報はありません</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- フィルタ -->
+    <div class="mb-4">
+      <h3>フィルタ</h3>
+      <form id="filter-form" class="d-flex flex-wrap align-items-center gap-3">
+        <!-- 属性チェックボックス -->
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="pets_allowed"
+                 id="filter-pets"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-pets">ペット可</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="barrier_free"
+                 id="filter-barrier"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-barrier">バリアフリー</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="toilet_available"
+                 id="filter-toilet"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-toilet">トイレ</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="food_available"
+                 id="filter-food"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-food">食料提供</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="medical_available"
+                 id="filter-medical"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-medical">医療対応</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="wifi_available"
+                 id="filter-wifi"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-wifi">Wi-Fi</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input"
+                 type="checkbox"
+                 name="charging_available"
+                 id="filter-charging"
+                 onchange="fetchShelters()">
+          <label class="form-check-label" for="filter-charging">充電設備</label>
+        </div>
+
+        <!-- 距離フィルター -->
+        <div class="form-group d-flex align-items-center ms-3">
+          <label for="filter-distance" class="me-2 mb-0">表示範囲:</label>
+          <select id="filter-distance"
+                  class="form-select form-select-sm w-auto"
+                  onchange="fetchShelters()">
+            <option value="0">全て表示</option>
+            <option value="5">5km以内</option>
+            <option value="10">10km以内</option>
+            <option value="20">20km以内</option>
+          </select>
+        </div>
+      </form>
+    </div>
+
+    <!-- 避難所一覧 -->
+    <div class="mb-4">
+      <h3>避難所一覧</h3>
+      <div id="shelter-list">
+        {% for shelter in shelters %}
+          <div class="shelter card mb-3 p-3" data-id="{{ shelter.id }}">
+            <h4>{{ shelter.name }}</h4>
+            <p>住所: {{ shelter.address }}</p>
+            <p>定員: {{ shelter.capacity }}人</p>
+            <p>現在人数: {{ shelter.current_occupancy }}人
+               ({{ (shelter.current_occupancy / shelter.capacity * 100)|round(1) }}%)</p>
+            <!-- 静的な距離表示は削除しました -->
+
+            <div class="occupancy-bar mb-2">
+              <div
+                class="occupancy-fill {% if shelter.current_occupancy / shelter.capacity >= 0.8 %}warning{% endif %}"
+                style="width: {{ (shelter.current_occupancy / shelter.capacity * 100) }}%;"
+              ></div>
+            </div>
+
+            <canvas id="chart-{{ shelter.id }}" height="50"></canvas>
+
+            <div class="tags mb-2">
+              {% if shelter.pets_allowed %}<span class="tag">ペット可</span>{% endif %}
+              {% if shelter.barrier_free %}<span class="tag">バリアフリー</span>{% endif %}
+              {% if shelter.toilet_available %}<span class="tag">トイレ</span>{% endif %}
+              {% if shelter.food_available %}<span class="tag">食料提供</span>{% endif %}
+              {% if shelter.medical_available %}<span class="tag">医療対応</span>{% endif %}
+              {% if shelter.wifi_available %}<span class="tag">Wi-Fi</span>{% endif %}
+              {% if shelter.charging_available %}<span class="tag">充電設備</span>{% endif %}
+              {% for alert in alerts %}
+                {% if alert.area in shelter.address %}
+                  <span class="tag">警報: {{ alert.warning_type }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            <p>状態: {{ '開設中' if shelter.status == 'open' else '閉鎖' }}</p>
+
+            {% if shelter.photos %}
+              <div class="photo-gallery mb-2">
+                {% for photo in shelter.photos %}
+                  <img src="{{ photo }}" class="photo-preview me-1" />
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            <button class="favorite-btn btn btn-outline-secondary me-1"
+                    onclick="toggleFavorite({{ shelter.id }})">
+              ☆ お気に入り登録
+            </button>
+            <button class="btn btn-outline-primary me-1"
+                    onclick="showDetails({{ shelter.id }})">
+              詳細
+            </button>
+            <a
+              href="https://www.google.com/maps/dir/?api=1&destination={{ shelter.latitude }},{{ shelter.longitude }}"
+              target="_blank"
+              class="btn btn-outline-success"
+            >ルート案内</a>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 避難所マップ -->
+    <div class="mb-4">
+      <h3>避難所マップ</h3>
+      <div id="map" style="height: 400px;"></div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- 自前のスクリプト -->
+  <script src="/static/script.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // fetchShelters は initMap 内の geolocation コールバックで呼ばれます
+      initMap();
+      const ws = new WebSocket('{{ ws_url }}');
+      ws.onmessage = evt => {
+        const data = JSON.parse(evt.data);
+        updateShelterList([data]);
+      };
+    });
+  </script>
+</body>
+</html>

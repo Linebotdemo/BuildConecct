@@ -1,0 +1,63 @@
+<!-- templates/shelters.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>避難所管理 - 日本版 Smart Shelter</title>
+
+  <!-- カスタムCSS -->
+  <link rel="stylesheet" href="/static/style.css">
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
+</head>
+<body>
+  <header class="header">
+    <h1>避難所管理</h1>
+    {% if user.role == 'admin' %}
+      <a href="/logout" class="login-button">ログアウト</a>
+    {% endif %}
+  </header>
+
+  <!-- コントロールバー -->
+  <section id="controls">
+    <button id="export-csv">CSVエクスポート</button>
+    <input type="file" id="import-csv" accept=".csv">
+    検索: <input type="text" id="search-input" placeholder="名前で検索">
+    <label><input type="checkbox" class="filter" value="open"> 開設中</label>
+    <label><input type="checkbox" class="filter" value="closed"> 閉鎖</label>
+    <label><input type="checkbox" class="filter" value="pets_allowed"> ペット可</label>
+    <label><input type="checkbox" class="filter" value="barrier_free"> バリアフリー</label>
+    <label><input type="checkbox" class="filter" value="toilet_available"> トイレあり</label>
+  </section>
+
+  <!-- テーブル -->
+  <table id="shelter-table" class="display" style="width:100%">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>名前</th>
+        <th>定員</th>
+        <th>利用率</th>
+        <th>状態</th>
+        <th>アクション</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <!-- 地図 -->
+  <div id="map" style="height: 400px; margin-top: 20px;"></div>
+
+  <!-- 外部ライブラリ群 -->
+  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- カスタムJS -->
+  <script src="/static/script.js"></script>
+</body>
+</html>
