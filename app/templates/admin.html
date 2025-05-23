@@ -1,17 +1,25 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>避難所管理 - 日本版 Smart Shelter</title>
 
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
+
   <!-- Bootstrap CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <!-- Custom CSS -->
-  <link rel="stylesheet" href="/static/style.css">
-  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  />
+
+  <!-- カスタム CSS -->
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
 </head>
 <body>
   <div class="container my-4">
@@ -43,7 +51,13 @@
               </div>
               <div class="mb-3">
                 <label class="form-label">住所</label>
-                <input type="text" name="address" class="form-control" required onblur="updateAdminMapPin(0, this.value)">
+                <input
+                  type="text"
+                  name="address"
+                  class="form-control"
+                  required
+                  onblur="updateAdminMapPin(0, this.value)"
+                >
               </div>
               <input type="hidden" name="latitude">
               <input type="hidden" name="longitude">
@@ -123,11 +137,13 @@
           </div>
         </div>
 
+        <!-- 管理者用マップ -->
         <div class="mb-4">
           <h2>避難所マップ</h2>
           <div id="admin-map" style="height:400px;"></div>
         </div>
 
+        <!-- 一覧＋一括操作 -->
         <div class="mb-4">
           <h2>避難所一覧</h2>
           <div class="d-flex mb-2">
@@ -176,8 +192,47 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+  <!-- 自前スクリプト -->
   <script>
-    const token = '{{ token }}';
+    // ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    // ┃ ① Yahoo ジオコーディング関数定義    ┃
+    // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    const YAHOO_APPID = "dj00aiZpPWoyQVc5RXVkQWhXQyZzPWNvbnN1bWVyc2VjcmV0";
+// ① サーバーに叩きにいくヘルパー関数
+async function geocode(address) {
+  const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+  if (!res.ok) {
+    const detail = await res.json();
+    throw new Error(detail.detail || `HTTP ${res.status}`);
+  }
+  return await res.json();  // { lat, lon }
+}
+
+async function updateAdminMapPin(id, address) {
+  try {
+    const { lat, lon } = await geocode(address);
+    document.querySelector('input[name="latitude"]').value  = lat;
+    document.querySelector('input[name="longitude"]').value = lon;
+    let marker = adminMarkers[id];
+    if (!marker) {
+      marker = L.marker([lat, lon]).addTo(adminMap);
+      adminMarkers[id] = marker;
+    } else {
+      marker.setLatLng([lat, lon]);
+    }
+    adminMap.flyTo([lat, lon], 14);
+  } catch (err) {
+    console.error('ジオコーディングエラー:', err);
+    alert(`ジオコーディング取得失敗: ${err.message}`);
+  }
+}
+
+
+
+    // ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+    // ┃ 管理画面スクリプト（既存ロジック） ┃
+    // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+    const token  = '{{ token }}';
     const apiUrl = '{{ api_url }}';
     const wsUrl  = '{{ ws_url }}';
     let adminMap, adminMarkers = {};
@@ -196,32 +251,7 @@
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminMap);
     }
 
-    // 住所から緯度経度を取得（YahooジオコーディングAPI）
-    async function updateAdminMapPin(id, address) {
-      const appId = 'YOUR_YAHOO_APP_ID';  // ご自身の App ID に置き換えてください
-      const url = `https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${appId}&query=${encodeURIComponent(address)}&output=json`;
-      try {
-        const res  = await fetch(url);
-        const json = await res.json();
-        if (json.Feature && json.Feature.length) {
-          const [lon, lat] = json.Feature[0].Geometry.Coordinates.split(',');
-          document.querySelector('input[name="latitude"]').value  = lat;
-          document.querySelector('input[name="longitude"]').value = lon;
-          let marker = adminMarkers[id];
-          if (!marker) {
-            marker = L.marker([lat, lon]).addTo(adminMap);
-            adminMarkers[id] = marker;
-          } else {
-            marker.setLatLng([lat, lon]);
-          }
-          adminMap.flyTo([lat, lon], 14);
-        }
-      } catch (err) {
-        console.error('ジオコーディングエラー:', err);
-      }
-    }
-
-    // サーバーから避難所一覧を取得してリストとマーカーを更新
+    // 避難所一覧取得→リスト／マーカー更新
     async function fetchShelters() {
       const res = await fetch(apiUrl + '/shelters', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -270,31 +300,25 @@
           wifi_available:     fd.get('wifi_available')   === 'on',
           charging_available: fd.get('charging_available')==='on'
         },
-        photos: [],  // ← 空でも必ず含める
-        contact:    fd.get('contact'),
-        operator:   fd.get('operator'),
-        opened_at:  fd.get('opened_at')
-                       ? new Date(fd.get('opened_at')).toISOString()
-                       : new Date().toISOString(),
-        status:     fd.get('status')
+        photos:    [],
+        contact:   fd.get('contact'),
+        operator:  fd.get('operator'),
+        opened_at: fd.get('opened_at')
+                     ? new Date(fd.get('opened_at')).toISOString()
+                     : new Date().toISOString(),
+        status:    fd.get('status')
       };
-      console.log("🚀 payload:", JSON.stringify(payload, null, 2));
 
       const res = await fetch(apiUrl + '/shelters', {
-        method:  'POST',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type':  'application/json'
         },
-        body:    JSON.stringify(payload)
+        body: JSON.stringify(payload)
       });
+      if (!res.ok) return alert(`追加に失敗しました (${res.status})`);
 
-      if (!res.ok) {
-        console.error('Create shelter failed', await res.json());
-        return alert(`追加に失敗しました (${res.status})`);
-      }
-
-      // 写真アップロード
       const s = await res.json();
       const photo = fd.get('photo');
       if (photo && photo.size) {
@@ -312,26 +336,20 @@
       fetchShelters();
     });
 
-    // 編集ボタン
     function editForm(id) {
       location.href = `/admin/shelters/${id}/edit`;
     }
 
-    // 単一削除
     async function deleteShelter(id) {
       if (!confirm('削除しますか？')) return;
       const res = await fetch(`${apiUrl}/shelters/${id}`, {
         method:  'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        fetchShelters();
-      } else {
-        alert('削除に失敗しました');
-      }
+      if (res.ok) fetchShelters();
+      else alert('削除に失敗しました');
     }
 
-    // 一括更新
     async function bulkUpdate() {
       const ids = Array.from(document.querySelectorAll('.shelter-checkbox:checked')).map(cb => +cb.value);
       if (!ids.length) return alert('避難所を選択してください');
@@ -344,35 +362,32 @@
       if (occ)    body.current_occupancy = +occ;
 
       const res = await fetch(apiUrl + '/shelters/bulk-update', {
-        method:  'POST',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type':  'application/json'
         },
-        body:    JSON.stringify(body)
+        body: JSON.stringify(body)
       });
-
       if (res.ok) fetchShelters();
-      else        alert('一括更新に失敗しました');
+      else alert('一括更新に失敗しました');
     }
 
-    // 一括削除
     async function bulkDelete() {
       const ids = Array.from(document.querySelectorAll('.shelter-checkbox:checked')).map(cb => +cb.value);
       if (!ids.length) return alert('避難所を選択してください');
       if (!confirm('選択した避難所を削除しますか？')) return;
 
       const res = await fetch(apiUrl + '/shelters/bulk-delete', {
-        method:  'POST',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type':  'application/json'
         },
-        body:    JSON.stringify(ids)
+        body: JSON.stringify(ids)
       });
-
       if (res.ok) fetchShelters();
-      else        alert('一括削除に失敗しました');
+      else alert('一括削除に失敗しました');
     }
   </script>
 </body>

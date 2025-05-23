@@ -14,11 +14,14 @@ import json
 from datetime import datetime, timedelta
 from websockets.exceptions import ConnectionClosed
 import os
+from fastapi import FastAPI, HTTPException, Query
 import aiohttp
 import xml.etree.ElementTree as ET
 import uuid
 
 app = FastAPI()
+
+YAHOO_APPID = os.getenv("YAHOO_APPID")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/data", StaticFiles(directory="app/data"), name="data")
@@ -545,6 +548,31 @@ async def admin_page(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Error in admin_page: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@app.get("/api/geocode")
+async def geocode_address(address: str):
+    url = "https://map.yahooapis.jp/geocode/V1/geoCoder"
+    params = {
+        "appid": YAHOO_APPID,
+        "query": address,
+        "output": "json"
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as resp:
+            text = await resp.text()
+            # デバッグログ
+            print("Yahoo Geocode status:", resp.status)
+            print("Yahoo Geocode body:", text)
+            if resp.status != 200:
+                raise HTTPException(status_code=502, detail=f"Yahoo API error: HTTP {resp.status}")
+            data = await resp.json()
+    # エラー構造が帰ってくる場合は detail を掴む
+    if data.get("Feature") is None or not data["Feature"]:
+        msg = data.get("Error", [{"Message":"住所が見つかりません"}])[0]["Message"]
+        raise HTTPException(status_code=404, detail=f"Geocode failed: {msg}")
+    lon, lat = map(float, data["Feature"][0]["Geometry"]["Coordinates"].split(","))
+    return {"lat": lat, "lon": lon}
+
 
 @app.get("/favicon.ico", response_class=FileResponse)
 async def favicon():

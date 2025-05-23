@@ -216,15 +216,22 @@
   <script src="/static/script.js"></script>
 
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      // fetchShelters は initMap 内の geolocation コールバックで呼ばれます
-      initMap();
-      const ws = new WebSocket('{{ ws_url }}');
+  document.addEventListener('DOMContentLoaded', () => {
+    initMap();
+
+    // 環境に応じた WS URL を組み立て
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${location.host}/ws/shelters`;
+    try {
+      const ws = new WebSocket(wsUrl);
       ws.onmessage = evt => {
         const data = JSON.parse(evt.data);
         updateShelterList([data]);
       };
-    });
+    } catch (e) {
+      console.warn('WebSocket 接続に失敗:', e);
+    }
+  });
   </script>
 </body>
 </html>

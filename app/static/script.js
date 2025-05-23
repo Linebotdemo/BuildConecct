@@ -1,4 +1,22 @@
+const YAHOO_APPID = "dj00aiZpPWoyQVc5RXVkQWhXQyZzPWNvbnN1bWVyc2VjcmV0";
+
 let map, adminMap, userLocation, markers = [], adminMarkers = [], alertPolygons = [];
+
+async function geocodeWithYahoo(address) {
+  const url = new URL("https://map.yahooapis.jp/geocode/V1/geoCoder");
+  url.searchParams.set("appid", YAHOO_APPID);
+  url.searchParams.set("query", address);
+  url.searchParams.set("output", "json");
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Yahoo Geocode API error");
+  const json = await res.json();
+  if (!json.Feature?.length) throw new Error("住所が見つかりません");
+  const [lon, lat] = json.Feature[0].Geometry.Coordinates
+    .split(",")
+    .map(parseFloat);
+  return [lat, lon];
+}
 
 async function fetchShelters() {
     const search = document.getElementById('search')?.value;
@@ -242,9 +260,16 @@ function updateAlertSection(alerts) {
 }
 
 function initMap() {
+  // 1) map コンテナを Leaflet に紐づけて初期表示
   map = L.map('map').setView([35.6762, 139.6503], 10);
-  // ... タイルレイヤー追加 など …
 
+  // 2) ← ここが必須！OpenStreetMap のタイルレイヤーを追加
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(map);
+
+  // 既存の Geolocation → 避難所フェッチ処理
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       position => {
@@ -262,12 +287,12 @@ function initMap() {
         fetchShelters();
         fetchAlerts();
       },
-      {   // ← オプションオブジェクト
+      {
         enableHighAccuracy: true,
         timeout: 10000,
         maximumAge: 0
       }
-    );  // ← ここで getCurrentPosition の呼び出しを完全に閉じる
+    );
   } else {
     console.warn('Geolocation非対応');
     fetchShelters();
