@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 from websockets.exceptions import ConnectionClosed
 import os
 from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Query
+from typing import Optional
 import aiohttp
 import xml.etree.ElementTree as ET
 import uuid
@@ -572,6 +574,13 @@ async def geocode_address(address: str):
         raise HTTPException(status_code=404, detail=f"Geocode failed: {msg}")
     lon, lat = map(float, data["Feature"][0]["Geometry"]["Coordinates"].split(","))
     return {"lat": lat, "lon": lon}
+
+@app.get("/api/shelters")
+def list_shelters(status: Optional[str] = Query(None, regex="^(open|closed)$")):
+    query = db.query(Shelter)
+    if status:
+        query = query.filter(Shelter.status == status)
+    return query.all()
 
 
 @app.get("/favicon.ico", response_class=FileResponse)

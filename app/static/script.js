@@ -1,7 +1,12 @@
-const YAHOO_APPID = "dj00aiZpPWoyQVc5RXVkQWhXQyZzPWNvbnN1bWVyc2VjcmV0";
+// script.js
 
-let map, adminMap, userLocation, markers = [], adminMarkers = [], alertPolygons = [];
+const YAHOO_APPID = "dj00aiZpPWoyQVc5RXVkQWhXQyZzPWNvbnN1bWVyc2VjcmV0Jng9YTE-";
 
+let map, userLocation, markers = [], alertPolygons = [];
+
+/**
+ * Yahoo ジオコーディング API で住所→緯度経度を取得
+ */
 async function geocodeWithYahoo(address) {
   const url = new URL("https://map.yahooapis.jp/geocode/V1/geoCoder");
   url.searchParams.set("appid", YAHOO_APPID);
@@ -10,53 +15,213 @@ async function geocodeWithYahoo(address) {
 
   const res = await fetch(url);
   if (!res.ok) throw new Error("Yahoo Geocode API error");
-  const json = await res.json();
-  if (!json.Feature?.length) throw new Error("住所が見つかりません");
-  const [lon, lat] = json.Feature[0].Geometry.Coordinates
-    .split(",")
-    .map(parseFloat);
+  const j = await res.json();
+  if (!j.Feature?.length) throw new Error("住所が見つかりません");
+  const [lon, lat] = j.Feature[0].Geometry.Coordinates.split(",").map(parseFloat);
   return [lat, lon];
 }
 
+/**
+ * サーバーから避難所を取得し、
+ * 検索／フィルタ条件＋距離フィルタを適用して
+ * リストとマップを更新
+ */
 async function fetchShelters() {
-    const search = document.getElementById('search')?.value;
-    const form = document.getElementById('filter-form');
-    const distSelect = document.getElementById('filter-distance');
-    const maxDistance = distSelect ? parseFloat(distSelect.value) || 0 : 0;
-    const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (form) {
-        if (form.pets_allowed.checked) params.append('pets_allowed', 'true');
-        if (form.barrier_free.checked) params.append('barrier_free', 'true');
-        if (form.toilet_available.checked) params.append('toilet_available', 'true');
-        if (form.food_available.checked) params.append('food_available', 'true');
-        if (form.medical_available.checked) params.append('medical_available', 'true');
-        if (form.wifi_available.checked) params.append('wifi_available', 'true');
-        if (form.charging_available.checked) params.append('charging_available', 'true');
+  const search  = document.getElementById('search').value;
+  const status  = document.getElementById('filter-status').value;
+  const maxDist = +document.getElementById('filter-distance').value;
+  const form    = document.getElementById('filter-form');
+  const params  = new URLSearchParams();
+
+  if (search) params.append('search', search);
+  if (status) params.append('status', status);
+
+  // 属性チェックボックス
+  ['pets_allowed','barrier_free','toilet_available','food_available',
+   'medical_available','wifi_available','charging_available']
+    .forEach(name => {
+      if (form.elements[name]?.checked) {
+        params.append(name, 'true');
+      }
+    });
+
+  console.log("[fetchShelters] params:", params.toString());
+  try {
+    const res = await fetch(`/api/shelters?${params}`);
+    console.log("[fetchShelters] HTTP status:", res.status);
+    if (!res.ok) throw new Error("APIエラー");
+    const all = await res.json();
+
+    // → ここで状態／距離で絞り込み
+    let list = all;
+    if (status) {
+      console.log("[debug] status filter:", status);
+      list = list.filter(s => s.status === status);
     }
-    try {
-        const response = await fetch(`/api/shelters?${params}`);
-        if (!response.ok) throw new Error('APIエラー');
-       const allShelters = await response.json();
-       // 現在地取得済みかつ距離指定があれば絞り込む
-       const shelters = (userLocation && maxDistance > 0)
-         ? allShelters.filter(s => {
-             const d = calculateDistanceKm(userLocation, [s.latitude, s.longitude]);
-             return d <= maxDistance;
-           })
-         : allShelters;
-       if (document.getElementById('shelter-list')) {
-           updateShelterList(shelters);
-           updateMap(shelters);
-        }
-        if (document.getElementById('admin-shelter-list')) {
-            updateAdminShelterList(shelters);
-            updateAdminMap(shelters);
-        }
-    } catch (e) {
-        console.error('fetchSheltersエラー:', e);
+    if (userLocation && maxDist > 0) {
+      console.log("[debug] distance filter <= ", maxDist, "km");
+      list = list.filter(s =>
+        calculateDistanceKm(userLocation, [s.latitude, s.longitude]) <= maxDist
+      );
     }
+
+    updateShelterList(list);
+    updateMap(list);
+
+  } catch (e) {
+    console.error("fetchSheltersエラー:", e);
+  }
 }
+
+/**
+ * 一覧の描画
+ */
+function updateShelterList(shelters) {
+  const container = document.getElementById('shelter-list');
+  if (!container) return;
+  container.innerHTML = shelters.map(s => {
+    const pct = (s.current_occupancy / s.capacity) * 100;
+    const isWarn = pct >= 80;
+    const favs = JSON.parse(localStorage.getItem('favorites') || '[]');
+    const favClass = favs.includes(s.id) ? 'favorited' : '';
+    return `
+      <div class="shelter card mb-3 p-3" data-id="${s.id}">
+        <h4>${s.name}</h4>
+        <p>住所: ${s.address}</p>
+        <p>連絡先: ${s.contact || '―'}</p>
+        <p>運営団体: ${s.operator || '―'}</p>
+        <p>状態: ${s.status==='open'? '開設中':'閉鎖'}</p>
+        <p>定員: ${s.capacity}人</p>
+        <p>現在: ${s.current_occupancy}人 (${pct.toFixed(1)}%)</p>
+        <div class="occupancy-bar mb-2">
+          <div class="occupancy-fill ${isWarn?'warning':''}"
+               style="width:${pct}%;"></div>
+        </div>
+        ${s.photos.length? `
+          <div class="photo-gallery mb-2">
+            ${s.photos.map(p=>`<img src="${p}" class="photo-preview me-1 rounded" style="width:100px;cursor:pointer;">`).join('')}
+          </div>
+        `: ''}
+        <button class="favorite-btn btn btn-outline-secondary me-1 ${favClass}"
+                onclick="toggleFavorite(${s.id})">
+          ${favs.includes(s.id)? '★':'☆'} お気に入り
+        </button>
+        <a href="https://www.google.com/maps/dir/?api=1&destination=${s.latitude},${s.longitude}"
+           target="_blank" class="btn btn-outline-success">
+           ルート案内
+        </a>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Leaflet マップ上にマーカーを表示
+ */
+function updateMap(shelters) {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  shelters.forEach(s => {
+    const ico = L.divIcon({ className:'shelter-icon' });
+    const m = L.marker([s.latitude, s.longitude], { icon: ico })
+      .addTo(map)
+      .bindPopup(`${s.name}<br>${s.address}`);
+    markers.push(m);
+  });
+  if (userLocation && shelters.length) {
+    const bounds = L.latLngBounds(
+      shelters.map(s=>[s.latitude, s.longitude]).concat([userLocation])
+    );
+    map.fitBounds(bounds, { padding:[40,40] });
+  }
+}
+
+/**
+ * 距離計算（km）
+ */
+function calculateDistanceKm([lat1,lon1],[lat2,lon2]) {
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+/**
+ * お気に入りトグル
+ */
+function toggleFavorite(id) {
+  let favs = JSON.parse(localStorage.getItem('favorites')||'[]');
+  if (favs.includes(id)) favs = favs.filter(x=>x!==id);
+  else favs.push(id);
+  localStorage.setItem('favorites', JSON.stringify(favs));
+  fetchShelters();  // 再描画して星マーク反映
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // 1) 地図初期化
+  map = L.map('map').setView([35.6762, 139.6503], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OSM contributors'
+  }).addTo(map);
+
+  // 2) 位置情報取得 → 避難所／警報取得
+  const onLocation = position => {
+    userLocation = [position.coords.latitude, position.coords.longitude];
+    L.marker(userLocation, { icon: L.divIcon({ className: 'user-icon' }) })
+      .addTo(map)
+      .bindPopup('現在地').openPopup();
+    map.setView(userLocation, 12);
+    fetchShelters();
+    fetchAlerts();
+  };
+  const onLocationError = () => {
+    fetchShelters();
+    fetchAlerts();
+  };
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(onLocation, onLocationError, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    });
+  } else {
+    onLocationError();
+  }
+
+  // 3) 災害警報を5分ごとに自動更新
+  setInterval(fetchAlerts, 5 * 60 * 1000);
+  setInterval(fetchShelters, 5 * 60 * 1000);
+  // 4) 各フィルタ・検索のイベント設定
+  document.getElementById('search')
+    .addEventListener('input', fetchShelters);
+  ['filter-status','filter-distance']
+    .forEach(id => document.getElementById(id)
+      .addEventListener('change', fetchShelters)
+    );
+  ['pets_allowed','barrier_free','toilet_available','food_available',
+   'medical_available','wifi_available','charging_available']
+    .forEach(name => {
+      document.getElementsByName(name).forEach(cb =>
+        cb.addEventListener('change', fetchShelters)
+      );
+    });
+
+  // 5) サムネイル拡大
+  document.getElementById('shelter-list')
+    .addEventListener('click', ev => {
+      if (ev.target.classList.contains('photo-preview')) {
+        document.getElementById('modalImg').src = ev.target.src;
+        new bootstrap.Modal(document.getElementById('imageModal')).show();
+      }
+    });
+
+  // 6) WebSocket で最新避難所情報をリアルタイム反映
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/ws/shelters`);
+  ws.onmessage = e => updateShelterList([JSON.parse(e.data)]);
+});
+
+
+
 
 function updateShelterList(shelters) {
     const shelterList = document.getElementById('shelter-list');
@@ -107,6 +272,8 @@ function updateShelterList(shelters) {
             <div class="shelter" data-id="${shelter.id}">
                 <h4>${shelter.name}</h4>
                 <p>住所: ${shelter.address}</p>
+                <p>連絡先: ${shelter.contact || '―'}</p>
+                <p>運営団体: ${shelter.operator || '―'}</p>
                 <p>定員: ${shelter.capacity}人</p>
                 <p>現在人数: ${shelter.current_occupancy}人 (${occupancyPercent.toFixed(1)}%)</p>
                 <p>距離: ${distanceText}</p>
@@ -127,7 +294,6 @@ function updateShelterList(shelters) {
                         onclick="toggleFavorite(${shelter.id})">
                     ${isFavorited ? '★ お気に入り解除' : '☆ お気に入り登録'}
                 </button>
-                <button onclick="showDetails(${shelter.id})">詳細</button>
                 <a href="https://www.google.com/maps/dir/?api=1&destination=${shelter.latitude},${shelter.longitude}"
                    target="_blank">ルート案内</a>
             </div>
@@ -236,28 +402,108 @@ function updateAdminShelterList(shelters) {
     `).join('');
 }
 
-async function fetchAlerts() {
-    try {
-        const response = await fetch('/api/disaster-alerts');
-        const alerts = await response.json();
-        localStorage.setItem('alerts', JSON.stringify(alerts));
-        updateAlertSection(alerts);
-        updateMapAlerts(alerts);
-    } catch (e) {
-        console.error('fetchAlertsエラー:', e);
-        updateAlertSection([]);
+function filterNearbyAlerts(alerts, userLoc, maxKm) {
+  return alerts.filter(a => {
+    // 1) bounds 内にいるか
+    if (a.bounds) {
+      const [[lat1, lon1], [lat2, lon2]] = a.bounds;
+      const minLat = Math.min(lat1, lat2),
+            maxLat = Math.max(lat1, lat2),
+            minLon = Math.min(lon1, lon2),
+            maxLon = Math.max(lon1, lon2);
+      if (
+        userLoc[0] >= minLat && userLoc[0] <= maxLat &&
+        userLoc[1] >= minLon && userLoc[1] <= maxLon
+      ) return true;
     }
+    // 2) center があれば距離で判定
+    if (a.center) {
+      return calculateDistanceKm(userLoc, a.center) <= maxKm;
+    }
+    // → どちらもなければ「表示しない」
+    return false;
+  });
 }
 
-function updateAlertSection(alerts) {
-    const alertSection = document.getElementById('alert-section');
-    if (!alertSection) return;
-    alertSection.innerHTML = alerts.length ? alerts.map(alert => `
-        <div class="alert-item ${alert.level.toLowerCase()}">
-            ${alert.area}: ${alert.warning_type} - ${alert.description} (発行: ${new Date(alert.issued_at).toLocaleString()})
-        </div>
-    `).join('') : '<p>警報はありません</p>';
+
+async function fetchAlerts() {
+  if (!userLocation) {
+    updateAlertSection([]);
+    updateMapAlerts([]);
+    return;
+  }
+
+  // ① 都道府県コードを取得（ここは固定 or 逆ジオで動的に）
+  const prefCode = '08';  // とりあえず茨城県
+
+  // ② サーバー側プロキシ経由で気象庁 JSON をフェッチ
+  const url = `https://www.jma.go.jp/bosai/hazard/data/warning/${prefCode}.json`;
+  try {
+    const res = await fetch(`/proxy?url=${encodeURIComponent(url)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const j = await res.json();
+    const alerts = j.warning || [];
+
+    // ③ polygon の重心を計算し、30km以内だけフィルタ
+    const nearby = alerts.filter(a => {
+      if (!a.polygon) return false;
+      const center = computeCentroid(a.polygon);
+      return calculateDistanceKm(userLocation, center) <= 30;
+    });
+
+    updateAlertSection(nearby);
+    updateMapAlerts(nearby);
+
+  } catch (e) {
+    console.error('fetchAlerts error:', e);
+    updateAlertSection([]);
+    updateMapAlerts([]);
+  }
 }
+
+
+// 多角形の重心を求める関数（先ほどご紹介したもの）
+function computeCentroid(poly) {
+  let x = 0, y = 0, a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [y0, x0] = poly[j];
+    const [y1, x1] = poly[i];
+    const f = x0 * y1 - x1 * y0;
+    a += f;
+    x += (x0 + x1) * f;
+    y += (y0 + y1) * f;
+  }
+  a *= 0.5;
+  return [ y / (6 * a), x / (6 * a) ];
+}
+
+
+function updateAlertSection(alerts) {
+  const el = document.getElementById('alert-section');
+  if (!el) return;
+  if (!alerts.length) {
+    el.innerHTML = '<p>警報はありません</p>';
+    return;
+  }
+  el.innerHTML = alerts.map(a => {
+    const issued = new Date(a.issued_at).toLocaleString('ja-JP', {
+      year:   'numeric',
+      month:  'long',
+      day:    'numeric',
+      hour:   '2-digit',
+      minute: '2-digit'
+    });
+    return `
+      <div class="alert-item ${a.level.toLowerCase()}">
+        <strong>${a.area}: ${a.warning_type}</strong><br>
+        ${a.description}<br>
+        <small>発行: ${issued}</small>
+      </div>
+    `;
+  }).join('');
+}
+
+
 
 function initMap() {
   // 1) map コンテナを Leaflet に紐づけて初期表示
@@ -393,21 +639,42 @@ async function updateAdminMapPin(shelterId, address) {
 }
 
 function updateMapAlerts(alerts) {
-    alertPolygons.forEach(polygon => map.removeLayer(polygon));
-    alertPolygons = [];
-    alerts.forEach(alert => {
-        if (alert.bounds && alert.bounds[0][0] !== alert.bounds[1][0]) {
-            const color = alert.level === '特別警報' ? '#9b1d64' : alert.level === '警報' ? '#dc3545' : '#ffc107';
-            const polygon = L.rectangle(alert.bounds, {
-                color: color,
-                fillOpacity: 0.2,
-                weight: 2
-            }).addTo(map);
-            polygon.bindPopup(`${alert.area}: ${alert.warning_type}`);
-            alertPolygons.push(polygon);
-        }
+  // 既存のポリゴンをクリア
+  alertPolygons.forEach(p => map.removeLayer(p));
+  alertPolygons = [];
+
+  alerts.forEach(a => {
+    if (!a.polygon) return;
+    const color = a.level === '特別警報'
+      ? '#9b1d64'
+      : a.level === '警報'
+        ? '#dc3545'
+        : '#ffc107';
+
+    // a.polygon は [[lat,lon], …]
+    const poly = L.polygon(a.polygon, {
+      color,
+      fillOpacity: 0.2,
+      weight: 2
+    }).addTo(map);
+
+    const issued = new Date(a.issued).toLocaleString('ja-JP', {
+      year:   'numeric',
+      month:  'long',
+      day:    'numeric',
+      hour:   '2-digit',
+      minute: '2-digit'
     });
+
+    poly.bindPopup(`
+      <strong>${a.area}: ${a.name}</strong><br>
+      発行: ${issued}
+    `);
+
+    alertPolygons.push(poly);
+  });
 }
+
 
 function calculateDistanceKm(coord1, coord2) {
     const [lat1, lon1] = coord1;
