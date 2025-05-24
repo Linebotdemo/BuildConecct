@@ -128,10 +128,16 @@
                 </div>
               </div>
               <!-- 写真 -->
-              <div class="mb-3">
-                <label class="form-label">写真アップロード</label>
-                <input type="file" name="photos" accept="image/*" class="form-control" multiple>
-              </div>
+  <div class="mb-3">
+    <label class="form-label">写真アップロード</label>
+    <input
+      type="file"
+      name="photos"
+      accept="image/*"
+      multiple
+      class="form-control"
+    />
+  </div>
               <button type="submit" class="btn btn-primary">追加</button>
             </form>
           </div>
@@ -280,61 +286,77 @@ async function updateAdminMapPin(id, address) {
       });
     }
 
-    // 新規追加フォーム送信
-    document.getElementById('add-shelter-form').addEventListener('submit', async e => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const payload = {
-        name:              fd.get('name'),
-        address:           fd.get('address'),
-        latitude:          +fd.get('latitude')  || 35.6762,
-        longitude:         +fd.get('longitude') || 139.6503,
-        capacity:          +fd.get('capacity'),
-        current_occupancy: +fd.get('current_occupancy'),
-        attributes: {
-          pets_allowed:       fd.get('pets_allowed')     === 'on',
-          barrier_free:       fd.get('barrier_free')     === 'on',
-          toilet_available:   fd.get('toilet_available') === 'on',
-          food_available:     fd.get('food_available')   === 'on',
-          medical_available:  fd.get('medical_available')=== 'on',
-          wifi_available:     fd.get('wifi_available')   === 'on',
-          charging_available: fd.get('charging_available')==='on'
-        },
-        photos:    [],
-        contact:   fd.get('contact'),
-        operator:  fd.get('operator'),
-        opened_at: fd.get('opened_at')
-                     ? new Date(fd.get('opened_at')).toISOString()
-                     : new Date().toISOString(),
-        status:    fd.get('status')
-      };
+document.getElementById('add-shelter-form').addEventListener('submit', async e => {
+  e.preventDefault();
 
-      const res = await fetch(apiUrl + '/shelters', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type':  'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) return alert(`追加に失敗しました (${res.status})`);
+  // フォームの全フィールドを取得
+  const fd = new FormData(e.target);
 
-      const s = await res.json();
-      const photo = fd.get('photo');
-      if (photo && photo.size) {
-        const pfd = new FormData();
-        pfd.append('shelter_id', s.id);
-        pfd.append('file', photo);
-        await fetch(apiUrl + '/shelters/upload-photo', {
-          method:  'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body:    pfd
-        });
-      }
+  // ── ① payload を必ずここで定義 ──
+  const payload = {
+    name:              fd.get('name'),
+    address:           fd.get('address'),
+    latitude:          +fd.get('latitude')  || 35.6762,
+    longitude:         +fd.get('longitude') || 139.6503,
+    capacity:          +fd.get('capacity'),
+    current_occupancy: +fd.get('current_occupancy'),
+    attributes: {
+      pets_allowed:       fd.get('pets_allowed')     === 'on',
+      barrier_free:       fd.get('barrier_free')     === 'on',
+      toilet_available:   fd.get('toilet_available') === 'on',
+      food_available:     fd.get('food_available')   === 'on',
+      medical_available:  fd.get('medical_available')=== 'on',
+      wifi_available:     fd.get('wifi_available')   === 'on',
+      charging_available: fd.get('charging_available')==='on'
+    },
+    photos:    [],  // 最初は空配列
+    contact:   fd.get('contact'),
+    operator:  fd.get('operator'),
+    opened_at: fd.get('opened_at')
+                 ? new Date(fd.get('opened_at')).toISOString()
+                 : new Date().toISOString(),
+    status:    fd.get('status')
+  };
 
-      e.target.reset();
-      fetchShelters();
+  // ── ② 避難所レコードを作成 ──
+  const res = await fetch(apiUrl + '/shelters', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type':  'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    return alert(`避難所作成に失敗しました (${res.status})`);
+  }
+  const s = await res.json();
+
+  // ── ③ 作成したIDを使って複数画像をアップロード ──
+  const fileInput = e.target.querySelector('input[name="photos"]');
+  const files = fileInput.files;
+  if (files.length > 0) {
+    const pfd = new FormData();
+    pfd.append('shelter_id', s.id);
+    // バックエンドが "files: List[UploadFile]" で受け取るなら key は 'files'
+    for (const file of files) {
+      pfd.append('files', file);
+    }
+    const upRes = await fetch(apiUrl + '/shelters/upload-photos', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: pfd
     });
+    if (!upRes.ok) {
+      console.error('写真アップロード失敗:', await upRes.text());
+    }
+  }
+
+  // ── ④ 完了後リセット＆一覧再取得 ──
+  e.target.reset();
+  fetchShelters();
+});
+
 
     function editForm(id) {
       location.href = `/admin/shelters/${id}/edit`;
