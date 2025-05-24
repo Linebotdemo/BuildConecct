@@ -17,7 +17,14 @@ import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi import FastAPI, Query
 from typing import Optional
+from fastapi import UploadFile, File
+from models import Photo as PhotoModel
+from sqlalchemy import insert
+from sqlalchemy import select
+from fastapi.responses import StreamingResponse
 import aiohttp
+from sqlalchemy import insert
+import io
 import xml.etree.ElementTree as ET
 import uuid
 from fastapi.responses import JSONResponse
@@ -456,6 +463,13 @@ def get_area_bounds(area):
 async def get_disaster_alerts():
     return await fetch_weather_alerts()
 
+@app.get("/api/photos/{photo_id}")
+def get_photo(photo_id: int, db: Session = Depends(get_db)):
+    row = db.execute(select(PhotoModel.data, PhotoModel.content_type)
+                     .where(PhotoModel.id == photo_id)).one()
+    …
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, db: Session = Depends(get_db)):
     # ORM から生のオブジェクトを取ってくる
@@ -591,12 +605,24 @@ async def proxy(url: str):
         )
 
 
-@app.get("/api/shelters")
-def list_shelters(status: Optional[str] = Query(None, regex="^(open|closed)$")):
-    query = db.query(Shelter)
-    if status:
-        query = query.filter(Shelter.status == status)
-    return query.all()
+@app.post("/api/photos/upload")
+async def upload_photo_binary(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    content = await file.read()
+    stmt = insert(PhotoModel).values(
+        filename=file.filename,
+        content_type=file.content_type,
+        data=content
+    )
+    db.execute(stmt)
+    db.commit()
+    return {"filename": file.filename, "id": stmt.inserted_primary_key}
+
+
+
+
 
 
 @app.get("/favicon.ico", response_class=FileResponse)
