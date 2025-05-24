@@ -401,31 +401,6 @@ function updateAdminShelterList(shelters) {
         </div>
     `).join('');
 }
-
-function filterNearbyAlerts(alerts, userLoc, maxKm) {
-  return alerts.filter(a => {
-    // 1) bounds 内にいるか
-    if (a.bounds) {
-      const [[lat1, lon1], [lat2, lon2]] = a.bounds;
-      const minLat = Math.min(lat1, lat2),
-            maxLat = Math.max(lat1, lat2),
-            minLon = Math.min(lon1, lon2),
-            maxLon = Math.max(lon1, lon2);
-      if (
-        userLoc[0] >= minLat && userLoc[0] <= maxLat &&
-        userLoc[1] >= minLon && userLoc[1] <= maxLon
-      ) return true;
-    }
-    // 2) center があれば距離で判定
-    if (a.center) {
-      return calculateDistanceKm(userLoc, a.center) <= maxKm;
-    }
-    // → どちらもなければ「表示しない」
-    return false;
-  });
-}
-
-
 async function fetchAlerts() {
   let hadError = false;
   let alerts   = [];
@@ -437,14 +412,42 @@ async function fetchAlerts() {
     return;
   }
 
-  // ここで必ず定義！
   const urlJMA   = 'https://www.jma.go.jp/bosai/hazard/data/warning/00.json';
   const proxyUrl = `/proxy?url=${encodeURIComponent(urlJMA)}`;
   console.log('[fetchAlerts] proxyURL:', proxyUrl);
 
   try {
     const res     = await fetch(proxyUrl);
-    /* … */
+    const rawText = await res.text();
+    console.log('[fetchAlerts] raw response text:', rawText.slice(0,500), '…');
+
+    const jsonData = JSON.parse(rawText);
+    console.log('[fetchAlerts] parsed JSON keys:', Object.keys(jsonData));
+
+    const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
+    console.log('[fetchAlerts] 全エリア数:', areas.length);
+
+    areas.forEach(area => {
+      if (!area.polygon || !area.warnings) return;
+      const bounds = L.latLngBounds(area.polygon);
+      if (!bounds.contains(L.latLng(userLocation))) return;
+      area.warnings
+        .filter(w => w.status !== '解除')
+        .forEach(w => {
+          alerts.push({
+            area:         area.name,
+            warning_type: w.kind.name,
+            description:  w.kind.name,
+            issued_at:    w.issued,
+            level:        w.kind.name.includes('特別') ? '特別警報'
+                         : w.kind.name.includes('警報')  ? '警報'
+                         : '注意報',
+            polygon:      area.polygon
+          });
+        });
+    });
+    console.log('[fetchAlerts] ユーザー対象警報数:', alerts.length);
+
   } catch (e) {
     hadError = true;
     console.error('[fetchAlerts] ERROR:', e);
@@ -454,25 +457,6 @@ async function fetchAlerts() {
   updateMapAlerts(hadError ? [] : alerts);
 }
 
-
-
-
-
-
-// 多角形の重心を求める関数（先ほどご紹介したもの）
-function computeCentroid(poly) {
-  let x = 0, y = 0, a = 0;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [y0, x0] = poly[j];
-    const [y1, x1] = poly[i];
-    const f = x0 * y1 - x1 * y0;
-    a += f;
-    x += (x0 + x1) * f;
-    y += (y0 + y1) * f;
-  }
-  a *= 0.5;
-  return [ y / (6 * a), x / (6 * a) ];
-}
 
 
 function updateAlertSection(alerts, hadError = false) {
