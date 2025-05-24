@@ -17,6 +17,7 @@ import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi import FastAPI, Query
 from typing import Optional
+rom fastapi import Body
 from fastapi import UploadFile, File
 from models import Photo as PhotoModel
 from sqlalchemy import insert
@@ -318,7 +319,11 @@ async def bulk_update_shelters(request: BulkUpdateRequest, token: str = Depends(
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.post("/api/shelters/bulk-delete")
-async def bulk_delete_shelters(shelter_ids: List[int], token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def bulk_delete_shelters(
+    shelter_ids: List[int] = Body(...),     # ← ここで「Body に配列」を受け取る
+    token: str            = Depends(oauth2_scheme),
+    db: Session           = Depends(get_db),
+):
     try:
         shelters = db.query(ShelterModel).filter(ShelterModel.id.in_(shelter_ids)).all()
         if not shelters:
@@ -333,6 +338,7 @@ async def bulk_delete_shelters(shelter_ids: List[int], token: str = Depends(oaut
     except Exception as e:
         print(f"Error in bulk_delete_shelters: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
 
 @app.post("/api/shelters/upload-photo")
 async def upload_photo(shelter_id: int = Form(...), file: UploadFile = File(...), token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
