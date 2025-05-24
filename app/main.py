@@ -35,7 +35,7 @@ client = httpx.AsyncClient()
 YAHOO_APPID = os.getenv("YAHOO_APPID")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/data", StaticFiles(directory="data"), name="data")
+app.mount("/data", StaticFiles(directory="app/data"), name="data")
 templates = Jinja2Templates(directory="templates")
 
 app.add_middleware(
