@@ -19,6 +19,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi import FastAPI, Query
 from typing import Optional
 from fastapi import Body
+from fastapi import Form, File, UploadFile
+import traceback
 from fastapi import UploadFile, File
 from models import Photo as PhotoModel
 from sqlalchemy import insert
@@ -286,36 +288,70 @@ async def delete_shelter(
     return {"message": "避難所を削除しました"}
 
 @app.post("/api/shelters/bulk-update")
-async def bulk_update_shelters(request: BulkUpdateRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def bulk_update_shelters(
+    request: BulkUpdateRequest,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
     try:
-        shelters = db.query(ShelterModel).filter(ShelterModel.id.in_(request.shelter_ids)).all()
+        # 1) 対象レコードを取得
+        shelters = db.query(ShelterModel).filter(
+            ShelterModel.id.in_(request.shelter_ids)
+        ).all()
         if not shelters:
             raise HTTPException(status_code=404, detail="避難所が見つかりません")
+
+        # 2) 各レコードを更新＆ログ記録
         for shelter in shelters:
-            if request.status:
+            if request.status is not None:
                 shelter.status = request.status
             if request.current_occupancy is not None:
                 shelter.current_occupancy = request.current_occupancy
             shelter.updated_at = datetime.utcnow()
             await log_action(db, "bulk_update", shelter.id)
+
+        # 3) 一括コミット
         db.commit()
+
+        # 4) 更新後データをクライアントへリアルタイム通知
         for shelter in shelters:
-            shelter_dict = shelter.__dict__
-            shelter_dict["photos"] = shelter_dict["photos"].split(",") if shelter_dict["photos"] else []
-            shelter_dict["attributes"] = {
-                "pets_allowed": shelter.pets_allowed,
-                "barrier_free": shelter.barrier_free,
-                "toilet_available": shelter.toilet_available,
-                "food_available": shelter.food_available,
-                "medical_available": shelter.medical_available,
-                "wifi_available": shelter.wifi_available,
-                "charging_available": shelter.charging_available
+            shelter_dict = {
+                "id": shelter.id,
+                "name": shelter.name,
+                "address": shelter.address,
+                "latitude": shelter.latitude,
+                "longitude": shelter.longitude,
+                "capacity": shelter.capacity,
+                "current_occupancy": shelter.current_occupancy,
+                "attributes": {
+                    "pets_allowed":       shelter.pets_allowed,
+                    "barrier_free":       shelter.barrier_free,
+                    "toilet_available":   shelter.toilet_available,
+                    "food_available":     shelter.food_available,
+                    "medical_available":  shelter.medical_available,
+                    "wifi_available":     shelter.wifi_available,
+                    "charging_available": shelter.charging_available,
+                },
+                "photos": shelter.photos.split(",") if shelter.photos else [],
+                "contact":   shelter.contact,
+                "operator":  shelter.operator,
+                "opened_at": shelter.opened_at,
+                "status":    shelter.status,
+                "updated_at": shelter.updated_at
             }
             await broadcast_shelter_update(shelter_dict)
+
         return {"message": "避難所を一括更新しました"}
+
     except Exception as e:
-        print(f"Error in bulk_update_shelters: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        # エラー発生時に詳細なトレースをコンソールに出力
+        print(f"Error in bulk_update_shelters: {e}")
+        traceback.print_exc()
+        # クライアントには 500 を返す
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal Server Error: {e}"
+        )
 
 @app.post("/api/shelters/bulk-delete")
 async def bulk_delete_shelters(
@@ -468,6 +504,35 @@ def get_area_bounds(area):
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts():
     return await fetch_weather_alerts()
+
+@app.post("/api/shelters/upload-photos")
+async def upload_photos(
+    shelter_id: int = Form(...),
+    files: List[UploadFile] = File(...),
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+):
+    db_shelter = db.query(ShelterModel).get(shelter_id)
+    if not db_shelter:
+        raise HTTPException(404, "避難所が見つかりません")
+    os.makedirs("app/data/photos", exist_ok=True)
+    photo_urls = []
+    for file in files:
+        ext = file.filename.split(".")[-1]
+        filename = f"{uuid.uuid4()}.{ext}"
+        path = os.path.join("app/data/photos", filename)
+        with open(path, "wb") as f:
+            f.write(await file.read())
+        url = f"/data/photos/{filename}"
+        photo_urls.append(url)
+    # DBの photos フィールドに追記
+    existing = db_shelter.photos.split(",") if db_shelter.photos else []
+    db_shelter.photos = ",".join(existing + photo_urls)
+    db.commit()
+    # ブロードキャストもお忘れなく
+    shelter_dict = {...}  # 既存の方法で dict 化
+    await broadcast_shelter_update(shelter_dict)
+    return {"photo_urls": photo_urls}
 
 
 @app.get("/api/photos/{photo_id}")
