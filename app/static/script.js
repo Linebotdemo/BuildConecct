@@ -427,23 +427,52 @@ function filterNearbyAlerts(alerts, userLoc, maxKm) {
 
 
 async function fetchAlerts() {
+  let hadError = false;      // ← ここで定義！
+  let alerts = [];
+
   if (!userLocation) {
     console.warn('[fetchAlerts] ユーザー位置情報なし。処理中断。');
-    updateAlertSection([], true);
+    hadError = true;
+    updateAlertSection([], hadError);
     updateMapAlerts([]);
     return;
   }
+try {
+  const res = await fetch(proxyUrl);
+  rawText = await res.text();
+  console.log('[fetchAlerts] raw response text:', rawText);
+  jsonData = JSON.parse(rawText);
+  // areaTypes→areas flatten
+  const areas = (jsonData.areaTypes||[]).flatMap(t => t.areas||[]);
+  areas.forEach(area => {
+    if (!area.polygon || !area.warnings) return;
+    const bounds = L.latLngBounds(area.polygon);
+    if (!bounds.contains(L.latLng(userLocation))) return;
+    area.warnings
+      .filter(w => w.status !== '解除')
+      .forEach(w => {
+        alerts.push({
+          area: area.name,
+          warning_type: w.kind.name,
+          description: w.kind.name,
+          issued_at: w.issued,
+          level: w.kind.name.includes('特別') ? '特別警報'
+               : w.kind.name.includes('警報')  ? '警報'
+               : '注意報',
+          polygon: area.polygon
+        });
+      });
+  });
+  console.log('[fetchAlerts] ユーザー対象警報数:', alerts.length);
+} catch (e) {
+  hadError = true;
+  console.error('[fetchAlerts] ERROR:', e);
+}
 
-  // …（中略：fetch→パース→alerts 配列作成）…
 
-  // 6) 結果を UI に反映
-  if (!hadError) {
-    updateAlertSection(alerts, false);
-    updateMapAlerts(alerts);
-  } else {
-    updateAlertSection([], true);
-    updateMapAlerts([]);
-  }
+  // UI 更新
+  updateAlertSection(alerts, hadError);
+  updateMapAlerts(hadError ? [] : alerts);
 }
 
 
@@ -481,8 +510,8 @@ function updateAlertSection(alerts, hadError = false) {
 
   el.innerHTML = alerts.map(a => {
     const issued = new Date(a.issued_at).toLocaleString('ja-JP', {
-      year:   'numeric', month: 'long', day: 'numeric',
-      hour:   '2-digit', minute: '2-digit'
+      year: 'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
     return `
       <div class="alert-item ${a.level.toLowerCase()}">
@@ -493,7 +522,6 @@ function updateAlertSection(alerts, hadError = false) {
     `;
   }).join('');
 }
-
 
 
 
