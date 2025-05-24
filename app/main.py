@@ -463,22 +463,21 @@ def get_area_bounds(area):
 async def get_disaster_alerts():
     return await fetch_weather_alerts()
 
+
 @app.get("/api/photos/{photo_id}")
-def get_photo(
-    photo_id: int,
-    db: Session = Depends(get_db)       # ← ここで DB セッションを注入
-):
-    # sync な Session なので await しない
+async def get_photo(photo_id: int, db: Session = Depends(get_db)):
+    # PhotoModel.data, content_type を取得
     row = db.execute(
         select(PhotoModel.data, PhotoModel.content_type)
         .where(PhotoModel.id == photo_id)
     ).one_or_none()
 
-    if row is None:
+    if not row:
         raise HTTPException(status_code=404, detail="Photo not found")
 
     data, content_type = row
     return StreamingResponse(io.BytesIO(data), media_type=content_type)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, db: Session = Depends(get_db)):
@@ -607,12 +606,11 @@ async def proxy(url: str):
         resp = await client.get(url, timeout=10.0)
         resp.raise_for_status()
         return JSONResponse(status_code=200, content=resp.json())
-    except httpx.HTTPError as e:
-        # JSON エラー応答に統一
-        return JSONResponse(
-            status_code=502,
-            content={"error": "Upstream fetch failed", "detail": str(e)}
-        )
+    except httpx.HTTPStatusError as e:
+        # 404／502 は「警報なし」の JSON 構造を返す
+        if e.response.status_code in (404, 502):
+            return JSONResponse(status_code=200, content={ "areaTypes": [] })
+        raise
 
 
 @app.post("/api/photos/upload")

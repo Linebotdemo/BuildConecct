@@ -428,38 +428,75 @@ function filterNearbyAlerts(alerts, userLoc, maxKm) {
 
 async function fetchAlerts() {
   if (!userLocation) {
-    updateAlertSection([]);
+    console.warn('[fetchAlerts] ユーザー位置情報なし。処理中断。');
+    updateAlertSection([], true);
     updateMapAlerts([]);
     return;
   }
 
-  const prefCode = '08';   // とりあえず茨城県
-  const url = `https://www.jma.go.jp/bosai/hazard/data/warning/${prefCode}.json`;
+  const urlJMA = 'https://www.jma.go.jp/bosai/hazard/data/warning/00.json';
+  const proxyUrl = `/proxy?url=${encodeURIComponent(urlJMA)}`;
+  console.log('[fetchAlerts] proxyURL:', proxyUrl);
 
+  let rawText, jsonData, alerts = [], hadError = false;
   try {
-    const res = await fetch(`/proxy?url=${encodeURIComponent(url)}`);
-    console.log('⚡️ [fetchAlerts] HTTP status:', res.status, res.url);
-    const j = await res.json();
-    console.log('⚡️ [fetchAlerts] raw JMA JSON:', j);
+    // 1) fetch
+    const res = await fetch(proxyUrl);
+    console.log('[fetchAlerts] HTTP status:', res.status, res.url);
 
-    const alerts = j.warning || [];
-    console.log(`⚡️ [fetchAlerts] parsed alerts (${alerts.length} 件)`, alerts);
-    // ③ polygon の重心を計算し、30km以内だけフィルタ
-    const nearby = alerts.filter(a => {
-      if (!a.polygon) return false;
-      const center = computeCentroid(a.polygon);
-      return calculateDistanceKm(userLocation, center) <= 30;
+    // 2) 生テキスト
+    rawText = await res.text();
+    console.log('[fetchAlerts] raw response text:', rawText.slice(0, 500), '…');
+
+    // 3) JSON parse
+    try {
+      jsonData = JSON.parse(rawText);
+    } catch (e) {
+      throw new Error('JSON.parse 失敗: ' + e.message);
+    }
+    console.log('[fetchAlerts] parsed JSON keys:', Object.keys(jsonData));
+
+    // 4) areaTypes→areas flatten
+    const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
+    console.log('[fetchAlerts] 全エリア数:', areas.length);
+
+    // 5) 現在地を含むエリアを抽出
+    areas.forEach(area => {
+      if (!area.polygon || !area.warnings) return;
+      const bounds = L.latLngBounds(area.polygon);
+      if (!bounds.contains(L.latLng(userLocation))) return;
+      area.warnings
+        .filter(w => w.status !== '解除')
+        .forEach(w => {
+          alerts.push({
+            area:         area.name,
+            warning_type: w.kind.name,
+            description:  w.kind.name,
+            issued_at:    w.issued,
+            level:        w.kind.name.includes('特別') ? '特別警報'
+                         : w.kind.name.includes('警報')  ? '警報'
+                         : '注意報',
+            polygon:      area.polygon
+          });
+        });
     });
-
-    updateAlertSection(nearby);
-    updateMapAlerts(nearby);
+    console.log('[fetchAlerts] ユーザー対象警報数:', alerts.length);
 
   } catch (e) {
-    console.error('fetchAlerts error:', e);
-    updateAlertSection([]);
-    updateMapAlerts([]);
+    hadError = true;
+    console.error('[fetchAlerts] ERROR:', e);
+  }
+
+  // 6) 結果を UI に反映
+  if (!hadError) {
+    updateAlertSection(alerts, false);
+    updateMapAlerts(alerts);
+  } else {
+    updateAlertSection([], true);
+    updateMapAlerts([]);  // ポリゴンもクリア
   }
 }
+
 
 
 // 多角形の重心を求める関数（先ほどご紹介したもの）
@@ -478,20 +515,24 @@ function computeCentroid(poly) {
 }
 
 
-function updateAlertSection(alerts) {
+function updateAlertSection(alerts, hadError = false) {
   const el = document.getElementById('alert-section');
   if (!el) return;
-  if (!alerts.length) {
-    el.innerHTML = '<p>警報はありません</p>';
+
+  if (hadError) {
+    el.innerHTML = '<p class="alert-error">⚠️ 警報情報の取得に失敗しました。コンソールログをご確認ください。</p>';
     return;
   }
+
+  if (!alerts.length) {
+    el.innerHTML = '<p class="alert-none">📭 現在、警報はありません。</p>';
+    return;
+  }
+
   el.innerHTML = alerts.map(a => {
     const issued = new Date(a.issued_at).toLocaleString('ja-JP', {
-      year:   'numeric',
-      month:  'long',
-      day:    'numeric',
-      hour:   '2-digit',
-      minute: '2-digit'
+      year:   'numeric', month: 'long', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
     return `
       <div class="alert-item ${a.level.toLowerCase()}">
@@ -502,6 +543,7 @@ function updateAlertSection(alerts) {
     `;
   }).join('');
 }
+
 
 
 
