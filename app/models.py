@@ -1,3 +1,4 @@
+
 # app/models.py
 
 from sqlalchemy import (
@@ -13,6 +14,7 @@ from sqlalchemy import (
     LargeBinary
 )
 from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, DateTime, func
 from datetime import datetime
 from database import Base  # database.py で定義した declarative_base()
 
@@ -40,6 +42,8 @@ class Shelter(Base):
     opened_at         = Column(DateTime, default=datetime.utcnow)
     status            = Column(String, default="open")  # "open" or "closed"
     updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    owner_id          = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    owner             = relationship("Company", back_populates="shelters")
 
     # Shelter と紐付く監査ログ
     audit_logs        = relationship("AuditLog", back_populates="shelter")
@@ -70,3 +74,15 @@ class AuditLog(Base):
 
     # AuditLog と Shelter を双方向関連付け
     shelter    = relationship("Shelter", back_populates="audit_logs")
+
+class Company(Base):
+    __tablename__ = "companies"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    name       = Column(String, unique=True, nullable=False)
+    email      = Column(String, unique=True, nullable=False)
+    hashed_pw  = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
+
+    # (必要ならば) 自社が作成した避難所とのリレーション
+    shelters   = relationship("Shelter", back_populates="owner")

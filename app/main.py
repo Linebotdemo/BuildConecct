@@ -14,6 +14,8 @@ import json
 from datetime import datetime, timedelta
 from websockets.exceptions import ConnectionClosed
 import os
+from database import get_db
+from utils import router as company_router
 from schemas import BulkUpdateRequest
 from fastapi import FastAPI, HTTPException, Query
 from fastapi import FastAPI, Query
@@ -36,6 +38,9 @@ import httpx
 app = FastAPI()
 client = httpx.AsyncClient()
 
+app.include_router(company_router)
+
+
 YAHOO_APPID = os.getenv("YAHOO_APPID")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -50,12 +55,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -196,7 +196,8 @@ async def create_shelter(
         operator=shelter.operator,
         opened_at=shelter.opened_at,
         status=shelter.status,
-        updated_at=datetime.utcnow()
+        updated_at=datetime.utcnow(),
+        created_by=token,
     )
     db.add(db_shelter)
     db.commit()
@@ -275,17 +276,18 @@ async def delete_shelter(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    db_shelter = db.query(ShelterModel).filter(ShelterModel.id == shelter_id).first()
+    db_shelter = db.query(ShelterModel).get(shelter_id)
     if not db_shelter:
         raise HTTPException(status_code=404, detail="避難所が見つかりません")
-    # ① 削除前にログを記録
+    # ← 所有者チェック
+    if db_shelter.created_by != token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="削除権限がありません")
     await log_action(db, "delete", shelter_id)
-    # ② レコードを削除してコミット
     db.delete(db_shelter)
     db.commit()
-    # ③ クライアントへ削除通知
     await broadcast_shelter_update({"id": shelter_id, "deleted": True})
     return {"message": "避難所を削除しました"}
+
 
 @app.post("/api/shelters/bulk-update")
 async def bulk_update_shelters(
