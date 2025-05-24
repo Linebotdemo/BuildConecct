@@ -30,6 +30,12 @@ class Shelter(BaseModel):
     class Config:
         orm_mode = True
 
+class BulkUpdateRequest(BaseModel):
+    shelter_ids: List[int]
+    status: Optional[str] = None
+    current_occupancy: Optional[int] = None
+
+
 class ShelterUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = Field(None, min_length=1, max_length=255)

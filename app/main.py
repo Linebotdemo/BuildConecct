@@ -14,6 +14,7 @@ import json
 from datetime import datetime, timedelta
 from websockets.exceptions import ConnectionClosed
 import os
+from schemas import BulkUpdateRequest
 from fastapi import FastAPI, HTTPException, Query
 from fastapi import FastAPI, Query
 from typing import Optional
