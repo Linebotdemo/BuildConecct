@@ -17,7 +17,7 @@ import os
 from fastapi import FastAPI, HTTPException, Query
 from fastapi import FastAPI, Query
 from typing import Optional
-rom fastapi import Body
+from fastapi import Body
 from fastapi import UploadFile, File
 from models import Photo as PhotoModel
 from sqlalchemy import insert
