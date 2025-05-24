@@ -600,6 +600,7 @@ async def geocode_address(address: str):
     lon, lat = map(float, data["Feature"][0]["Geometry"]["Coordinates"].split(","))
     return {"lat": lat, "lon": lon}
 
+
 @app.get("/proxy")
 async def proxy(url: str):
     try:
@@ -607,9 +608,9 @@ async def proxy(url: str):
         resp.raise_for_status()
         return JSONResponse(status_code=200, content=resp.json())
     except httpx.HTTPStatusError as e:
-        # 404／502 は「警報なし」の JSON 構造を返す
         if e.response.status_code in (404, 502):
-            return JSONResponse(status_code=200, content={ "areaTypes": [] })
+            # 警報データがなければ空の areaTypes を返す
+            return JSONResponse(status_code=200, content={"areaTypes": []})
         raise
 
 
