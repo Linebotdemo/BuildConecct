@@ -267,24 +267,22 @@ async def update_shelter(shelter_id: int, shelter: ShelterUpdate, token: str = D
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.delete("/api/shelters/{shelter_id}")
-async def delete_shelter(shelter_id: int, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        db_shelter = db.query(ShelterModel).filter(ShelterModel.id == shelter_id).first()
-        if not db_shelter:
-            raise HTTPException(status_code=404, detail="避難所が見つかりません")
-        db.delete(db_shelter)
-        db.commit()
-        await log_action(db, "delete", shelter_id)
-        await broadcast_shelter_update({"id": shelter_id, "deleted": True})
-        return {"message": "避難所を削除しました"}
-    except Exception as e:
-        print(f"Error in delete_shelter: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
-
-class BulkUpdateRequest(BaseModel):
-    shelter_ids: List[int]
-    status: Optional[str] = None
-    current_occupancy: Optional[int] = None
+async def delete_shelter(
+    shelter_id: int,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    db_shelter = db.query(ShelterModel).filter(ShelterModel.id == shelter_id).first()
+    if not db_shelter:
+        raise HTTPException(status_code=404, detail="避難所が見つかりません")
+    # ① 削除前にログを記録
+    await log_action(db, "delete", shelter_id)
+    # ② レコードを削除してコミット
+    db.delete(db_shelter)
+    db.commit()
+    # ③ クライアントへ削除通知
+    await broadcast_shelter_update({"id": shelter_id, "deleted": True})
+    return {"message": "避難所を削除しました"}
 
 @app.post("/api/shelters/bulk-update")
 async def bulk_update_shelters(request: BulkUpdateRequest, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -320,24 +318,25 @@ async def bulk_update_shelters(request: BulkUpdateRequest, token: str = Depends(
 
 @app.post("/api/shelters/bulk-delete")
 async def bulk_delete_shelters(
-    shelter_ids: List[int] = Body(...),     # ← ここで「Body に配列」を受け取る
-    token: str            = Depends(oauth2_scheme),
-    db: Session           = Depends(get_db),
+    shelter_ids: List[int],
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
 ):
-    try:
-        shelters = db.query(ShelterModel).filter(ShelterModel.id.in_(shelter_ids)).all()
-        if not shelters:
-            raise HTTPException(status_code=404, detail="避難所が見つかりません")
-        for shelter in shelters:
-            db.delete(shelter)
-            await log_action(db, "bulk_delete", shelter.id)
-        db.commit()
-        for shelter in shelters:
-            await broadcast_shelter_update({"id": shelter.id, "deleted": True})
-        return {"message": "避難所を一括削除しました"}
-    except Exception as e:
-        print(f"Error in bulk_delete_shelters: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    shelters = db.query(ShelterModel).filter(ShelterModel.id.in_(shelter_ids)).all()
+    if not shelters:
+        raise HTTPException(status_code=404, detail="避難所が見つかりません")
+    # ログは削除前
+    for shelter in shelters:
+        await log_action(db, "bulk_delete", shelter.id)
+    # 一括削除
+    for shelter in shelters:
+        db.delete(shelter)
+    db.commit()
+    # WebSocket通知
+    for shelter in shelters:
+        await broadcast_shelter_update({"id": shelter.id, "deleted": True})
+    return {"message": "避難所を一括削除しました"}
+
 
 
 @app.post("/api/shelters/upload-photo")
