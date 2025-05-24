@@ -464,11 +464,21 @@ async def get_disaster_alerts():
     return await fetch_weather_alerts()
 
 @app.get("/api/photos/{photo_id}")
-def get_photo(photo_id: int, db: Session = Depends(get_db)):
-    row = db.execute(select(PhotoModel.data, PhotoModel.content_type)
-                     .where(PhotoModel.id == photo_id)).one()
-    …
+def get_photo(
+    photo_id: int,
+    db: Session = Depends(get_db)       # ← ここで DB セッションを注入
+):
+    # sync な Session なので await しない
+    row = db.execute(
+        select(PhotoModel.data, PhotoModel.content_type)
+        .where(PhotoModel.id == photo_id)
+    ).one_or_none()
 
+    if row is None:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    data, content_type = row
+    return StreamingResponse(io.BytesIO(data), media_type=content_type)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, db: Session = Depends(get_db)):
