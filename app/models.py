@@ -40,6 +40,7 @@ class Shelter(Base):
     contact           = Column(String, default="")
     operator          = Column(String, default="")
     opened_at         = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String)
     status            = Column(String, default="open")  # "open" or "closed"
     updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     owner_id          = Column(Integer, ForeignKey("companies.id"), nullable=False)

@@ -74,30 +74,3 @@ async def list_companies(db: Session = Depends(get_db)):
              .order_by(CompanyModel.created_at.desc())\
              .all()
 
-@router.get("/register", response_class=HTMLResponse)
-async def show_register(
-    request: Request,
-    credentials: HTTPBasicCredentials = Depends(security),
-    companies: List[CompanyModel] = Depends(list_companies),
-):
-    # Basic 認証ユーザー／パスワード（環境変数で管理推奨）
-    valid_user = os.getenv("REG_USER", "admin")
-    valid_pass = os.getenv("REG_PASS", "pass123")
-    if not (
-        secrets.compare_digest(credentials.username, valid_user)
-        and secrets.compare_digest(credentials.password, valid_pass)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-
-    # 認証成功 → register.html を companies 一覧付きでレンダリング
-    return templates.TemplateResponse(
-        "register.html",
-        {
-            "request": request,
-            "companies": companies
-        }
-    )

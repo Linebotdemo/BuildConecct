@@ -11,3 +11,5 @@ python-dotenv>=1.0
 httpx>=0.24.0
 passlib[bcrypt]
 pydantic[email]
+python-jose[cryptography]
+python-dateutil>=2.8.2

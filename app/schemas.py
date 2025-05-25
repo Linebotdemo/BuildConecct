@@ -29,7 +29,8 @@ class Shelter(BaseModel):
     opened_at: datetime
     status: str
     updated_at: Optional[datetime] = None
-
+    created_by: Optional[str] = None  # 追加
+    owner_id: Optional[int] = None 
     class Config:
         from_attributes = True
 

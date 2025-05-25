@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>企業登録 - 認証 - 日本版 Smart Shelter</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+</head>
+<body>
+    <h1>企業登録 - 認証</h1>
+    {% if error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="/register">
+        <label>パスワード: <input type="password" name="auth_password" required></label><br>
+        <button type="submit">認証</button>
+    </form>
+</body>
+</html>

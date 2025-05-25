@@ -1,3 +1,4 @@
+<!-- templates/login.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -7,14 +8,27 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 </head>
 <body>
-    <h1>ログイン（自治体向け）</h1>
+    <h1>ログイン</h1>
     {% if error %}
         <p style="color: red;">{{ error }}</p>
     {% endif %}
+
+    <!-- 管理者ログイン -->
+    <h2>管理者ログイン（自治体向け）</h2>
     <form method="post" action="/login">
-        <label>ユーザー名: <input type="text" name="username" required></label><br>
+        <label>ユーザー名: <input type="text" name="username" value="admin" required></label><br>
         <label>パスワード: <input type="password" name="password" required></label><br>
-        <button type="submit">ログイン</button>
+        <button type="submit">管理者ログイン</button>
     </form>
+
+    <!-- 企業ログイン -->
+    <h2>企業ログイン</h2>
+    <form method="post" action="/login">
+        <label>メールアドレス: <input type="email" name="username" required></label><br>
+        <label>パスワード: <input type="password" name="password" required></label><br>
+        <button type="submit">企業ログイン</button>
+    </form>
+
+    <p><a href="/register">企業アカウントを登録</a></p>
 </body>
 </html>

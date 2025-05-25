@@ -1,4 +1,3 @@
-<!-- templates/register.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -21,31 +20,27 @@
     </label><br>
     <button type="submit">登録</button>
   </form>
-
   <hr>
-
   <h2>登録済み企業一覧</h2>
   <ul id="company-list">
     <li>読み込み中…</li>
   </ul>
-
   <script>
-    // ① 登録フォーム送信ロジック（既存）
     document.getElementById("register-form").addEventListener("submit", async e => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const payload = {
-        name:     fd.get("name"),
-        email:    fd.get("email"),
+        name: fd.get("name"),
+        email: fd.get("email"),
         password: fd.get("password")
       };
       const res = await fetch("/api/companies", {
-        method:  "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(payload)
+        body: JSON.stringify(payload)
       });
       if (!res.ok) {
-        const detail = await res.json().catch(_=>null);
+        const detail = await res.json().catch(_ => null);
         alert("登録失敗: " + (detail?.detail || res.status));
         return;
       }
@@ -53,11 +48,9 @@
       e.target.reset();
       loadCompanies();
     });
-
-    // ② 企業一覧取得＆描画
     async function loadCompanies() {
       const res = await fetch("/api/companies");
-      const ul  = document.getElementById("company-list");
+      const ul = document.getElementById("company-list");
       if (!res.ok) {
         ul.innerHTML = `<li style="color:red;">一覧取得失敗 (${res.status})</li>`;
         return;
@@ -71,8 +64,6 @@
         .map(c => `<li>${c.name} （${c.email}）</li>`)
         .join("");
     }
-
-    // ページ読み込み時に一覧取得
     document.addEventListener("DOMContentLoaded", loadCompanies);
   </script>
 </body>
