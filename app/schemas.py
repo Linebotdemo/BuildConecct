@@ -29,8 +29,9 @@ class Shelter(BaseModel):
     opened_at: datetime
     status: str
     updated_at: Optional[datetime] = None
-    created_by: Optional[str] = None  # 追加
-    owner_id: Optional[int] = None 
+    created_by: Optional[str] = None
+    owner_id: Optional[int] = None
+
     class Config:
         from_attributes = True
 
@@ -65,6 +66,16 @@ class AuditLog(BaseModel):
     shelter_id: Optional[int] = None
     user: str
     timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class CompanySchema(BaseModel):
+    id: Optional[int] = None
+    name: str = Field(..., min_length=1, max_length=255)
+    email: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., min_length=6)
+    hashed_pw: Optional[str] = None
 
     class Config:
         from_attributes = True
