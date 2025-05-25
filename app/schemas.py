@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime
 
@@ -73,9 +73,11 @@ class AuditLog(BaseModel):
 class CompanySchema(BaseModel):
     id: Optional[int] = None
     name: str = Field(..., min_length=1, max_length=255)
-    email: str = Field(..., min_length=1, max_length=255)
+    email: EmailStr = Field(...)
     password: str = Field(..., min_length=6)
+    role: str = Field(default="company", pattern="^(company|admin)$")  # 追加
     hashed_pw: Optional[str] = None
+    created_at: Optional[datetime] = None  # 追加
 
     class Config:
         from_attributes = True

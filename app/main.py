@@ -558,7 +558,7 @@ async def upload_photo(
 @company_router.post("/api/companies", response_model=CompanySchema)
 async def create_company(company: CompanySchema, db: Session = Depends(get_db)):
     try:
-        print(f"Received company data: {company.dict()}")  # デバッグ: 企業登録データ
+        print(f"Received company data: {company.dict()}")  # デバッグ
         existing_company = db.query(CompanyModel).filter(
             (CompanyModel.email == company.email) | (CompanyModel.name == company.name)
         ).first()
@@ -571,12 +571,12 @@ async def create_company(company: CompanySchema, db: Session = Depends(get_db)):
             name=company.name,
             email=company.email,
             hashed_pw=pwd_context.hash(company.password),
-            role="company"
+            role=company.role  # role を設定
         )
         db.add(db_company)
         db.commit()
         db.refresh(db_company)
-        print(f"Company created: email={db_company.email}, role={db_company.role}")  # デバッグ: 企業作成成功
+        print(f"Company created: email={db_company.email}, role={db_company.role}")  # デバッグ
         return db_company
     except ValidationError as e:
         print(f"Validation error: {e.errors()}")
