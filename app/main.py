@@ -38,6 +38,7 @@ from schemas import (
     ShelterUpdate as ShelterUpdateSchema,
     AuditLog as AuditLogSchema,
     BulkUpdateRequest
+    CompanySchema
 )
 
 # --- 企業周りのRouter ---
