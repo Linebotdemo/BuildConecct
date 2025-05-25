@@ -30,10 +30,19 @@
       e.preventDefault();
       const fd = new FormData(e.target);
       const payload = {
-        name: fd.get("name"),
-        email: fd.get("email"),
-        password: fd.get("password")
+        name: fd.get("name").trim(),
+        email: fd.get("email").trim(),
+        password: fd.get("password").trim()
       };
+      if (!payload.name || !payload.email || !payload.password) {
+        alert("すべてのフィールドを入力してください");
+        return;
+      }
+      if (!payload.email.includes('@') || !payload.email.includes('.')) {
+        alert("有効なメールアドレスを入力してください");
+        return;
+      }
+      console.log('Sending payload:', payload); // デバッグ
       const res = await fetch("/api/companies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -41,7 +50,12 @@
       });
       if (!res.ok) {
         const detail = await res.json().catch(_ => null);
-        alert("登録失敗: " + (detail?.detail || res.status));
+        console.error('Error response:', detail); // デバッグ
+        if (detail?.detail?.includes("既に登録されています")) {
+          alert("この企業名またはメールアドレスは既に登録されています");
+        } else {
+          alert("登録失敗: " + (detail?.detail || res.status));
+        }
         return;
       }
       alert("登録完了！　一覧を更新します。");

@@ -97,15 +97,20 @@ async def get_current_company(token: str = Depends(oauth2_scheme), db: Session =
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        print(f"Received token: {token[:10]}...")  # デバッグログ
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         role: str = payload.get("role")
+        print(f"Decoded payload: sub={email}, role={role}")  # デバッグログ
         if email is None or role != "company":
+            print(f"Invalid email or role: email={email}, role={role}")  # デバッグログ
             raise credentials_exception
-    except JWTError:
+    except JWTError as e:
+        print(f"JWT decode error: {str(e)}")  # デバッグログ
         raise credentials_exception
     company = db.query(CompanyModel).filter(CompanyModel.email == email).first()
     if company is None:
+        print(f"No company found for email: {email}")  # デバッグログ
         raise credentials_exception
     return company
 
@@ -324,9 +329,10 @@ async def delete_shelter(
     db_shelter = db.query(ShelterModel).get(shelter_id)
     if not db_shelter:
         raise HTTPException(status_code=404, detail="避難所が見つかりません")
-    if db_shelter.created_by != token:
+    current_company = await get_current_company(token, db)
+    if db_shelter.company_id != current_company.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="削除権限がありません")
-    await log_action(db, "delete", shelter_id, token)
+    await log_action(db, "delete", shelter_id, current_company.email)
     db.delete(db_shelter)
     db.commit()
     await broadcast_shelter_update({"id": shelter_id, "deleted": True})
@@ -441,6 +447,31 @@ async def upload_photo(
     except Exception as e:
         print(f"Error in upload_photo: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@router.post("/api/companies", response_model=CompanySchema)
+async def create_company(company: CompanySchema, db: Session = Depends(get_db)):
+    try:
+        print(f"Received company data: {company.dict()}")  # デバッグログ
+        existing_company = db.query(CompanyModel).filter(
+            (CompanyModel.email == company.email) | (CompanyModel.name == company.name)
+        ).first()
+        if existing_company:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="企業名またはメールアドレスが既に登録されています"
+            )
+        db_company = CompanyModel(
+            name=company.name,
+            email=company.email,
+            hashed_pw=pwd_context.hash(company.password)
+        )
+        db.add(db_company)
+        db.commit()
+        db.refresh(db_company)
+        return db_company
+    except Exception as e:
+        print(f"Error creating company: {str(e)}")  # デバッグログ
+        raise HTTPException(status_code=400, detail=f"企業登録に失敗しました: {str(e)}")
 
 @app.post("/api/shelters/upload-photos")
 async def upload_photos(
