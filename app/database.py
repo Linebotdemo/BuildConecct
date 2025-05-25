@@ -1,14 +1,11 @@
-# database.py
-
 import os
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
-print(f"→ Using DATABASE_URL = {DATABASE_URL!r}")
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # 1️⃣ Read the URL from env, or default to a local SQLite file for dev.
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db").replace("postgres://", "postgresql://")
+print(f"→ Using DATABASE_URL = {DATABASE_URL!r}")
 
 # For SQLite only:
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}

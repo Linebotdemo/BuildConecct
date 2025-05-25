@@ -11,6 +11,9 @@ class ShelterAttributes(BaseModel):
     wifi_available: bool
     charging_available: bool
 
+    class Config:
+        from_attributes = True
+
 class Shelter(BaseModel):
     id: Optional[int] = None
     name: str
@@ -28,13 +31,15 @@ class Shelter(BaseModel):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class BulkUpdateRequest(BaseModel):
     shelter_ids: List[int]
     status: Optional[str] = None
     current_occupancy: Optional[int] = None
 
+    class Config:
+        from_attributes = True
 
 class ShelterUpdate(BaseModel):
     name: Optional[str] = None
@@ -51,7 +56,7 @@ class ShelterUpdate(BaseModel):
     status: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class AuditLog(BaseModel):
     id: Optional[int] = None
@@ -61,4 +66,4 @@ class AuditLog(BaseModel):
     timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
