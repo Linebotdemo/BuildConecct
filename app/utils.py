@@ -1,5 +1,3 @@
-# utils.py
-
 import os
 import secrets
 from datetime import datetime
@@ -37,7 +35,7 @@ class CompanyOut(BaseModel):
     email: EmailStr
     created_at: datetime
     class Config:
-        orm_mode = True
+        from_attributes = True  # orm_mode を from_attributes に変更
 
 # ルーター＆テンプレート設定
 router = APIRouter(prefix="/api/companies", tags=["companies"])
