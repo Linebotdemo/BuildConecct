@@ -251,8 +251,8 @@ async def get_shelters(
             })
         return result
     except Exception as e:
-        print(f"Error in get_shelters: {e}")
-        raise HTTPException(status_code=500, detail="避難所の取得に失敗しました")
+        print(f"Error in get_shelters: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"避難所の取得に失敗しました: {str(e)}")
 
 
 @app.post("/api/shelters", response_model=ShelterSchema)
@@ -282,6 +282,7 @@ async def create_shelter(
         opened_at=shelter.opened_at,
         status=shelter.status,
         updated_at=datetime.utcnow(),
+        company_id=current_company.id
     )
     db.add(db_s)
     db.commit()
@@ -630,7 +631,7 @@ async def index(request: Request, db: Session = Depends(get_db)):
             })
     except Exception as e:
         print(f"Error fetching shelters: {str(e)}")
-        shelters = []  # エラー時は空リストを返す
+        shelters = []
     alerts = await get_disaster_alerts()
     return templates.TemplateResponse(
         "index.html",
@@ -642,7 +643,6 @@ async def index(request: Request, db: Session = Depends(get_db)):
             "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://safeshelter.onrender.com/ws/shelters"
         }
     )
-
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})

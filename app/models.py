@@ -74,12 +74,8 @@ class AuditLog(Base):
 
 class Company(Base):
     __tablename__ = "companies"
-
-    id         = Column(Integer, primary_key=True, index=True)
-    name       = Column(String, unique=True, nullable=False)
-    email      = Column(String, unique=True, nullable=False)
-    hashed_pw  = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    email = Column(String, unique=True, nullable=False)
+    hashed_pw = Column(String, nullable=False)
     created_at = Column(DateTime, nullable=False, server_default=func.now())
-
-    # (必要ならば) 自社が作成した避難所とのリレーション
-    shelters   = relationship("Shelter", back_populates="owner")
