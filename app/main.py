@@ -261,7 +261,6 @@ async def create_shelter(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ):
-    # トークンから企業情報を取得
     current_company = await get_current_company(token, db)
     db_s = ShelterModel(
         name=shelter.name,
@@ -283,8 +282,6 @@ async def create_shelter(
         opened_at=shelter.opened_at,
         status=shelter.status,
         updated_at=datetime.utcnow(),
-        created_by=current_company.email,  # 企業のメールアドレスを設定
-        owner_id=current_company.id       # 企業IDを設定
     )
     db.add(db_s)
     db.commit()
@@ -605,31 +602,35 @@ async def get_disaster_alerts():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, db: Session = Depends(get_db)):
-    shelters_orm = db.query(ShelterModel).all()
     shelters = []
-    for s in shelters_orm:
-        shelters.append({
-            "id": s.id,
-            "name": s.name,
-            "address": s.address,
-            "capacity": s.capacity,
-            "current_occupancy": s.current_occupancy,
-            "latitude": s.latitude,
-            "longitude": s.longitude,
-            "pets_allowed": s.pets_allowed,
-            "barrier_free": s.barrier_free,
-            "toilet_available": s.toilet_available,
-            "food_available": s.food_available,
-            "medical_available": s.medical_available,
-            "wifi_available": s.wifi_available,
-            "charging_available": s.charging_available,
-            "photos": s.photos.split(",") if s.photos else [],
-            "contact": s.contact,
-            "operator": s.operator,
-            "opened_at": s.opened_at,
-            "status": s.status,
-            "updated_at": s.updated_at
-        })
+    try:
+        shelters_orm = db.query(ShelterModel).all()
+        for s in shelters_orm:
+            shelters.append({
+                "id": s.id,
+                "name": s.name,
+                "address": s.address,
+                "capacity": s.capacity,
+                "current_occupancy": s.current_occupancy,
+                "latitude": s.latitude,
+                "longitude": s.longitude,
+                "pets_allowed": s.pets_allowed,
+                "barrier_free": s.barrier_free,
+                "toilet_available": s.toilet_available,
+                "food_available": s.food_available,
+                "medical_available": s.medical_available,
+                "wifi_available": s.wifi_available,
+                "charging_available": s.charging_available,
+                "photos": s.photos.split(",") if s.photos else [],
+                "contact": s.contact,
+                "operator": s.operator,
+                "opened_at": s.opened_at,
+                "status": s.status,
+                "updated_at": s.updated_at
+            })
+    except Exception as e:
+        print(f"Error fetching shelters: {str(e)}")
+        shelters = []  # エラー時は空リストを返す
     alerts = await get_disaster_alerts()
     return templates.TemplateResponse(
         "index.html",
@@ -638,7 +639,7 @@ async def index(request: Request, db: Session = Depends(get_db)):
             "alerts": alerts,
             "shelters": shelters,
             "api_url": "/api",
-            "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://<your-service>.onrender.com/ws/shelters"
+            "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://safeshelter.onrender.com/ws/shelters"
         }
     )
 
@@ -654,7 +655,13 @@ async def login_post(
     db: Session = Depends(get_db)
 ):
     try:
-        # 管理者ログイン
+        shelters = []
+        logs = []
+        try:
+            shelters = db.query(ShelterModel).all()
+            logs = db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).limit(50).all()
+        except Exception as e:
+            print(f"Error fetching shelters/logs in login_post: {str(e)}")
         if username == "admin":
             form_data = OAuth2PasswordRequestForm(username=username, password=password, scope="")
             response = await create_access_token(form_data)
@@ -664,16 +671,15 @@ async def login_post(
                 {
                     "request": request,
                     "token": token,
-                    "shelters": db.query(ShelterModel).all(),
-                    "logs": db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).limit(50).all(),
+                    "shelters": shelters,
+                    "logs": logs,
                     "api_url": "/api",
-                    "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://<your-service>.onrender.com/ws/shelters"
+                    "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://safeshelter.onrender.com/ws/shelters"
                 }
             )
             template_response.set_cookie(key="token", value=token)
             return template_response
 
-        # 企業ログイン
         company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
         if company and pwd_context.verify(password, company.hashed_pw):
             access_token = jwt.encode(
@@ -688,13 +694,12 @@ async def login_post(
                     "company": company,
                     "shelters": db.query(ShelterModel).filter(ShelterModel.operator == company.name).all(),
                     "api_url": "/api",
-                    "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://<your-service>.onrender.com/ws/shelters"
+                    "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://safeshelter.onrender.com/ws/shelters"
                 }
             )
             template_response.set_cookie(key="company_token", value=access_token)
             return template_response
 
-        # 認証失敗
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "メールアドレスまたはパスワードが正しくありません"}
