@@ -37,7 +37,7 @@ from schemas import (
     Shelter as ShelterSchema,
     ShelterUpdate as ShelterUpdateSchema,
     AuditLog as AuditLogSchema,
-    BulkUpdateRequest
+    BulkUpdateRequest,
     CompanySchema
 )
 
