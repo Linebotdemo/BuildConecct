@@ -20,12 +20,9 @@ from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from database import get_db, Base, engine
+print("→ LOADING utils.py (no create_all)")
+from database import get_db
 from models import Company as CompanyModel
-
-# テーブル作成
-Base.metadata.create_all(bind=engine)
 
 # パスワードハッシュ用
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
