@@ -448,7 +448,7 @@ async def upload_photo(
         print(f"Error in upload_photo: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@router.post("/api/companies", response_model=CompanySchema)
+@company_router.post("/api/companies", response_model=CompanySchema)
 async def create_company(company: CompanySchema, db: Session = Depends(get_db)):
     try:
         print(f"Received company data: {company.dict()}")  # デバッグログ
