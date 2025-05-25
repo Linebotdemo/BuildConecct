@@ -50,27 +50,22 @@ app = FastAPI()
 # スタートアップイベント
 @app.on_event("startup")
 async def on_startup():
-    print("→ Startup creating tables with:", os.getenv("DATABASE_URL"))
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)  # テーブル作成を有効化
     db = SessionLocal()
     try:
         admin = db.query(CompanyModel).filter(CompanyModel.email == "admin").first()
-        print(f"Admin check: {admin}")  # デバッグ: admin レコードの存在確認
+        print(f"Admin check: {admin}")  # デバッグ
         if not admin:
-            admin = CompanyModel(
-                name="管理者",
-                email="admin",
-                hashed_pw=pwd_context.hash("admin123"),
-                role="admin"
-            )
+            hashed_pw = pwd_context.hash("admin123")
+            admin = CompanyModel(email="admin", name="管理者", hashed_pw=hashed_pw, role="admin")
             db.add(admin)
             db.commit()
             print("Admin account created successfully")
         else:
-            print(f"Admin account exists: email={admin.email}, role={admin.role}, id={admin.id}")
+            print(f"Admin account exists: email={admin.email}, role={admin.role}")
     except Exception as e:
         print(f"Error creating admin account: {str(e)}")
-        traceback.print_exc()
     finally:
         db.close()
 
@@ -292,45 +287,12 @@ async def login_post(
 @app.get("/api/shelters", response_model=List[ShelterSchema])
 async def get_shelters(
     search: Optional[str] = None,
-    pets_allowed: Optional[bool] = None,
-    barrier_free: Optional[bool] = None,
-    toilet_available: Optional[bool] = None,
-    food_available: Optional[bool] = None,
-    medical_available: Optional[bool] = None,
-    wifi_available: Optional[bool] = None,
-    charging_available: Optional[bool] = None,
     db: Session = Depends(get_db)
 ):
     try:
         query = db.query(ShelterModel)
         shelters = query.all()
-        result = []
-        for s in shelters:
-            result.append({
-                "id": s.id,
-                "name": s.name,
-                "address": s.address,
-                "latitude": s.latitude,
-                "longitude": s.longitude,
-                "capacity": s.capacity,
-                "current_occupancy": s.current_occupancy,
-                "attributes": {
-                    "pets_allowed": s.pets_allowed,
-                    "barrier_free": s.barrier_free,
-                    "toilet_available": s.toilet_available,
-                    "food_available": s.food_available,
-                    "medical_available": s.medical_available,
-                    "wifi_available": s.wifi_available,
-                    "charging_available": s.charging_available,
-                },
-                "photos": s.photos.split(",") if s.photos else [],
-                "contact": s.contact,
-                "operator": s.operator,
-                "opened_at": s.opened_at,
-                "status": s.status,
-                "updated_at": s.updated_at
-            })
-        return result
+        return shelters
     except Exception as e:
         print(f"Error in get_shelters: {str(e)}")
         raise HTTPException(status_code=500, detail=f"避難所の取得に失敗しました: {str(e)}")
