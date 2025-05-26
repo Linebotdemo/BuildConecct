@@ -90,6 +90,8 @@ logger.info("JWT_SECRET_KEY: %s...", SECRET_KEY[:10])
 logger.info("ENV: %s", ENV)
 
 # 静的ファイル・テンプレート設定
+os.makedirs("app/static", exist_ok=True)  # Create app/static if it doesn't exist
+os.makedirs("app/data", exist_ok=True)    # Create app/data if it doesn't exist
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/data", StaticFiles(directory="app/data"), name="data")
 templates = Jinja2Templates(directory="app/templates")
@@ -345,7 +347,6 @@ async def get_shelters(
     try:
         logger.info("Fetching shelters, search=%s, user=%s", search, current_user.email)
         query = db.query(ShelterModel)
-        logger.debug("Query initialized: %s", query)
         if current_user.role != "admin":
             query = query.filter(ShelterModel.company_id == current_user.id)
             logger.debug("Filtered by company_id: %s", current_user.id)
@@ -930,10 +931,7 @@ async def company_dashboard_page(
         token = request.cookies.get("token")
         if not token:
             logger.error("No token found in cookies")
-            return templates.TemplateResponse(
-                "login.html",
-                {"request": request, "error": "ログインしてください"},
-            )
+            raise HTTPException(status_code=401, detail="ログインしてください")
         return templates.TemplateResponse(
             "company-dashboard.html",
             {
@@ -942,12 +940,12 @@ async def company_dashboard_page(
                 "shelters": shelters,
                 "token": token,
                 "api_url": "/api",
-                "ws_url": "ws://localhost:8000}/ws{shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
-                "YAHOOAPPID": YAHOOAPPID,
+                "ws_url": "ws://localhost:8000/ws/shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
+                "YAHOO_APPID": YAHOO_APPID,
             },
         )
     except Exception as e:
-        logger.error("Error in company_dashboard_page: %s\n%s", str(e), traceback.format_exc(e))
+        logger.error("Error in company_dashboard_page: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ダッシュボードのレンダリングに失敗しました: {str(e)}")
 
 # ログアウト
@@ -959,7 +957,7 @@ async def logout_page(request: Request):
         response.delete_cookie("token")
         return response
     except Exception as e:
-        logger.error(f"Error in logout_page: {str(e)}", traceback.format_exc())
+        logger.error("Error in logout_page: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ログアウトに失敗しました: {str(e)}")
 
 # 写真アップロード（バイナリ）
@@ -969,7 +967,7 @@ async def upload_photo_binary(
     db: Session = Depends(get_db),
 ):
     try:
-        logger.info(f"Uploading binary photo: filename={file.filename}")
+        logger.info("Uploading photo: filename=%s", file.filename)
         content = await file.read()
         photo = PhotoModel(
             filename=file.filename,
@@ -979,10 +977,10 @@ async def upload_photo_binary(
         db.add(photo)
         db.commit()
         db.refresh(photo)
-        logger.info(f"Photo uploaded: id={photo.id}")
-        return {"filename": photo.filename, "id": photo.id}
+        logger.info("Photo uploaded: id=%s", photo.id)
+        return {"filename": file.filename, "id": photo.id}
     except Exception as e:
-        logger.error(f"Error in upload_photo_binary: %s{s}\n%s{s}", str(e), traceback.format_exc())
+        logger.error("Error in upload_photo_binary: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"写真アップロードに失敗しました: {str(e)}")
 
@@ -999,30 +997,23 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             return
         try:
             user = await get_current_user(token, db)
-            client_id = f"{user.email}_{str(uuid.uuid4())}"
+            client_id = f"{user.email}_{uuid.uuid4()}"
             connected_clients[client_id] = websocket
-            logger.info(f"WebSocket connected: client_id={client_id}, user={user.email}")
+            logger.info("WebSocket connected: id=%s, user=%s", client_id, user.email)
             while True:
-                try:
-                    data = await websocket.receive_json()
-                    logger.debug(f"Received WebSocket message: {data}")
-                except:
-                    logger.error(f"WebSocket error: {str(e)}")
-                    await websocket.close()
-                    return
+                data = await websocket.receive_json()
+                logger.debug("Received WebSocket message: %s", data)
         except JWTError as e:
-            logger.error(f"WebSocket JWT error: {str(e)}")
+            logger.error("WebSocket JWT error: %s", str(e))
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: client_id={client_id}")
     except Exception as e:
-        logger.error(f"WebSocket error: {str(e)}\n{traceback.format_exc(e)}")
+        logger.error("WebSocket error: %s\n%s", str(e), traceback.format_exc())
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     finally:
         if client_id and client_id in connected_clients:
             del connected_clients[client_id]
-            logger.info(f"WebSocket closed: client_id={client_id}")
+            logger.info("WebSocket disconnected: id=%s", client_id)
 
 # ファビコン
 @app.get("/favicon.ico", response_class=FileResponse)
@@ -1034,5 +1025,5 @@ async def favicon():
         logger.warning("Favicon not found")
         return Response(status_code=204)
     except Exception as e:
-        logger.error(f"Error in favicon: {str(e)}\n{traceback.format_exc(e)}")
+        logger.error("Error: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ファビコン取得に失敗しました: {str(e)}")
