@@ -308,16 +308,20 @@
     // 避難所リストの取得と表示
 async function fetchShelters() {
     try {
+        console.log('Fetching shelters with token:', authToken);
         const res = await fetch(`${apiUrl}/shelters`, {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
         });
+        console.log('Response status:', res.status);
+        const text = await res.text();
+        console.log('Raw response:', text);
         if (!res.ok) {
-            const errorData = await res.text(); // JSON でない場合を考慮
-            throw new Error(errorData || `HTTP ${res.status}`);
+            throw new Error(`HTTP ${res.status}: ${text}`);
         }
-        const shelters = await res.json();
+        const shelters = JSON.parse(text);
+        console.log('Parsed shelters:', shelters);
         const list = document.getElementById('admin-shelter-list');
         list.innerHTML = '';
         shelters.forEach(shelter => {
@@ -350,7 +354,6 @@ async function fetchShelters() {
         alert(`避難所データの取得に失敗しました: ${error.message}`);
     }
 }
-
     // 避難所追加フォームの処理
 document.getElementById('add-shelter-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -360,6 +363,7 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
         return;
     }
     const fd = new FormData(e.target);
+    console.log('Form data:', Object.fromEntries(fd));
     const address = fd.get('address').trim();
     let latitude = parseFloat(fd.get('latitude'));
     let longitude = parseFloat(fd.get('longitude'));
@@ -369,7 +373,9 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
             const geoData = await geocode(address);
             latitude = geoData.lat;
             longitude = geoData.lon;
+            console.log('Geocoded coordinates:', { latitude, longitude });
         } catch (error) {
+            console.error('Geocoding error:', error);
             alert(`住所から座標を取得できませんでした: ${error.message}`);
             return;
         }
@@ -408,12 +414,21 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
             },
             body: JSON.stringify(payload)
         });
+        console.log('Response status:', res.status);
+        const text = await res.text();
+        console.log('Raw response:', text);
         if (!res.ok) {
-            const error = await res.json();
-            console.error('Shelter creation error:', error);
-            throw new Error(error.detail || `避難所作成に失敗しました (${res.status})`);
+            let errorData;
+            try {
+                errorData = JSON.parse(text);
+            } catch {
+                errorData = { detail: text };
+            }
+            console.error('Shelter creation error:', errorData);
+            throw new Error(errorData.detail || `避難所作成に失敗しました (${res.status})`);
         }
-        const shelter = await res.json();
+        const shelter = JSON.parse(text);
+        console.log('Created shelter:', shelter);
         const fileInput = e.target.querySelector('input[name="photos"]');
         const files = fileInput.files;
         if (files.length > 0) {
@@ -442,7 +457,6 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
         alert(`避難所作成に失敗しました: ${error.message}`);
     }
 });
-
     // 一括更新
     async function bulkUpdate() {
       const status = document.getElementById('bulk-status').value;
@@ -517,6 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchShelters();
 
     function connectWebSocket() {
+        console.log('Attempting WebSocket connection to:', wsUrl);
         const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(authToken)}`);
         ws.onopen = () => {
             console.log('WebSocket connected');
@@ -530,7 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         ws.onclose = () => {
             console.log('WebSocket closed');
-            setTimeout(connectWebSocket, 5000); // 5秒後に再接続
+            setTimeout(connectWebSocket, 5000);
         };
     }
     connectWebSocket();
