@@ -1,5 +1,208 @@
+import sys
+import os
+import json
+import uuid
+import io
+import logging
+import traceback
+from datetime import datetime, timedelta
+from typing import List, Optional, Dict
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    WebSocket,
+    status,
+    File,
+    UploadFile,
+    Request,
+    Form,
+    Query,
+)
+from fastapi.responses import HTMLResponse, Response, FileResponse, JSONResponse, StreamingResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+from pydantic import ValidationError
+import httpx
+import xml.etree.ElementTree as ET
+
+# ロギング設定
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# デバッグ用ログ
+logger.info("Current working directory: %s", os.getcwd())
+logger.info("Python sys.path: %s", sys.path)
+
+# --- DB周り ---
+from database import SessionLocal, engine, Base, get_db
+
+# --- ORMモデル ---
+from models import (
+    Shelter as ShelterModel,
+    AuditLog as AuditLogModel,
+    Company as CompanyModel,
+    Photo as PhotoModel,
+)
+
+# --- Pydanticスキーマ ---
+from schemas import (
+    Shelter as ShelterSchema,
+    ShelterUpdate as ShelterUpdateSchema,
+    AuditLog as AuditLogSchema,
+    BulkUpdateRequest,
+    CompanySchema,
+)
+
+# --- 企業周りのRouter ---
+from utils import router as company_router
+
+# FastAPI アプリケーション
+app = FastAPI(title="SafeShelter API", version="1.0.0")
+
+# 環境変数の検証
+REQUIRED_ENV_VARS = ["YAHOO_APPID", "JWT_SECRET_KEY", "REG_PASS", "DATABASE_URL"]
+missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+if missing_vars:
+    error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
+    logger.error(error_msg)
+    raise RuntimeError(error_msg)
+
+# 環境変数
+YAHOO_APPID = os.getenv("YAHOO_APPID")
+REG_PASS = os.getenv("REG_PASS")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ENV = os.getenv("ENV", "production")
+
+logger.info("YAHOO_APPID: %s", YAHOO_APPID)
+logger.info("REG_PASS: %s", "*" * len(REG_PASS) if REG_PASS else "Not set")
+logger.info("JWT_SECRET_KEY: %s...", SECRET_KEY[:10])
+logger.info("ENV: %s", ENV)
+
+# 静的ファイル・テンプレート設定
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/data", StaticFiles(directory="app/data"), name="data")
+templates = Jinja2Templates(directory="app/templates")
+connected_clients: Dict[str, WebSocket] = {}
+
+# CORS設定
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://safeshelter.onrender.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# パスワードハッシュ用
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# 認証方式
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/company-token")
+
+# HTTP クライアント
+client = httpx.Client(timeout=10.0)
+
+# スタートアップイベント
+@app.on_event("startup")
+async def on_startup():
+    logger.info("Starting database initialization...")
+    try:
+        Base.metadata.create_all(bind=engine)  # テーブル作成
+        with SessionLocal() as db:
+            admin = db.query(CompanyModel).filter(CompanyModel.email == "admin@example.com").first()
+            logger.info("Admin check: %s", admin)
+            if not admin:
+                hashed_pw = pwd_context.hash("admin123")
+                admin = CompanyModel(
+                    email="admin@example.com",
+                    name="管理者",
+                    hashed_pw=hashed_pw,
+                    role="admin",
+                    created_at=datetime.utcnow(),
+                )
+                db.add(admin)
+                db.commit()
+                logger.info("Admin account created successfully")
+            else:
+                logger.info("Admin account exists: email=%s, role=%s", admin.email, admin.role)
+    except Exception as e:
+        logger.error("Error creating admin account: %s\n%s", str(e), traceback.format_exc())
+        raise
+
+# 企業登録／一覧 用 API をマウント
+app.include_router(company_router)
+
+# トークン検証
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="トークンが無効です",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        logger.info("Received token: %s...", token[:10])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        role: str = payload.get("role")
+        exp: int = payload.get("exp")
+        logger.info("Decoded payload: sub=%s, role=%s, exp=%s", email, role, exp)
+        if email is None or role not in ["company", "admin"]:
+            logger.error("Invalid email or role: email=%s, role=%s", email, role)
+            raise credentials_exception
+        if exp is None or datetime.utcnow().timestamp() > exp:
+            logger.error("Token expired: exp=%s, current=%s", exp, datetime.utcnow().timestamp())
+            raise credentials_exception
+        company = db.query(CompanyModel).filter(CompanyModel.email == email).first()
+        if company is None:
+            logger.error("No company found for email: %s", email)
+            raise credentials_exception
+        logger.info("Authenticated user: email=%s, role=%s, id=%s", company.email, company.role, company.id)
+        return company
+    except JWTError as e:
+        logger.error("JWT decode error: %s", str(e))
+        raise credentials_exception
+
+# トークン生成エンドポイント
+@app.post("/api/company-token", response_model=dict)
+async def create_company_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
+    logger.info("Token request: username=%s", form_data.username)
+    company = db.query(CompanyModel).filter(CompanyModel.email == form_data.username).first()
+    if not company or not pwd_context.verify(form_data.password, company.hashed_pw):
+        logger.error("Authentication failed for username: %s", form_data.username)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="メールアドレスまたはパスワードが正しくありません",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = jwt.encode(
+        {
+            "sub": company.email,
+            "role": company.role,
+            "exp": access_token_expires,
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+    logger.info("Token generated: sub=%s, role=%s, token=%s...", company.email, company.role, access_token[:10])
+    return {"access_token": access_token, "token_type": "bearer"}
+
 # ログアクション関数
-def log_action(db: Session, action: str, shelter_id: Optional[int] = None, user: Optional[str] = None, user="system"):
+def log_action(db: Session, action: str, shelter_id: Optional[int] = None, user: Optional[str] = "system"):
     try:
         db_log = AuditLogModel(
             action=action,
@@ -28,7 +231,7 @@ async def broadcast_shelter_update(data: dict):
     for client_id in disconnected:
         if client_id in connected_clients:
             del connected_clients[client_id]
-            logger.info("Disconnected WebSocket client: %s", client_id)
+            logger.info("Disconnected client: %s", client_id)
 
 # ログイン画面（GET）
 @app.get("/login", response_class=HTMLResponse)
@@ -544,7 +747,6 @@ async def geocode_address_endpoint(address: str):
             logger.error("Geocode failed: %s", msg)
             raise HTTPException(status_code=404, detail=f"ジオコーディング失敗: {msg}")
         feature = data["Feature"][0]
-        # Geometryキーまたは類似キーの存在を確認
         if "Geometry" in feature:
             coordinates = feature["Geometry"].get("Coordinates")
         elif "geometry" in feature:
@@ -567,7 +769,6 @@ async def geocode_address_endpoint(address: str):
 async def proxy(url: str):
     try:
         logger.info("Proxy request: url=%s", url)
-        # 正しいエンドポイントに置き換え
         if "jma.go.jp" in url and "warning/00.json" in url:
             url = url.replace("warning/00.json", "forecast/data/warning.json")
         resp = await client.get(url, timeout=10.0)
@@ -741,12 +942,12 @@ async def company_dashboard_page(
                 "shelters": shelters,
                 "token": token,
                 "api_url": "/api",
-                "ws_url": "ws://localhost:8000/ws/shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
-                "YAHOO_APPID": YAHOO_APPID,
+                "ws_url": "ws://localhost:8000}/ws{shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
+                "YAHOOAPPID": YAHOOAPPID,
             },
         )
     except Exception as e:
-        logger.error("Error in company_dashboard_page: %s\n%s", str(e), traceback.format_exc())
+        logger.error("Error in company_dashboard_page: %s\n%s", str(e), traceback.format_exc(e))
         raise HTTPException(status_code=500, detail=f"ダッシュボードのレンダリングに失敗しました: {str(e)}")
 
 # ログアウト
@@ -758,7 +959,7 @@ async def logout_page(request: Request):
         response.delete_cookie("token")
         return response
     except Exception as e:
-        logger.error("Error in logout_page: %s\n%s", str(e), traceback.format_exc())
+        logger.error(f"Error in logout_page: {str(e)}", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ログアウトに失敗しました: {str(e)}")
 
 # 写真アップロード（バイナリ）
@@ -768,7 +969,7 @@ async def upload_photo_binary(
     db: Session = Depends(get_db),
 ):
     try:
-        logger.info("Uploading binary photo: filename=%s", file.filename)
+        logger.info(f"Uploading binary photo: filename={file.filename}")
         content = await file.read()
         photo = PhotoModel(
             filename=file.filename,
@@ -778,10 +979,10 @@ async def upload_photo_binary(
         db.add(photo)
         db.commit()
         db.refresh(photo)
-        logger.info("Photo uploaded: id=%s", photo.id)
-        return {"filename": file.filename, "id": photo.id}
+        logger.info(f"Photo uploaded: id={photo.id}")
+        return {"filename": photo.filename, "id": photo.id}
     except Exception as e:
-        logger.error("Error in upload_photo_binary: %s\n%s", str(e), traceback.format_exc())
+        logger.error(f"Error in upload_photo_binary: %s{s}\n%s{s}", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"写真アップロードに失敗しました: {str(e)}")
 
@@ -798,25 +999,30 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             return
         try:
             user = await get_current_user(token, db)
-            client_id = f"{user.email}_{uuid.uuid4()}"
+            client_id = f"{user.email}_{str(uuid.uuid4())}"
             connected_clients[client_id] = websocket
-            logger.info("WebSocket connected: client_id=%s, user=%s", client_id, user.email)
+            logger.info(f"WebSocket connected: client_id={client_id}, user={user.email}")
             while True:
-                data = await websocket.receive_json()
-                logger.debug("Received WebSocket message: %s", data)
+                try:
+                    data = await websocket.receive_json()
+                    logger.debug(f"Received WebSocket message: {data}")
+                except:
+                    logger.error(f"WebSocket error: {str(e)}")
+                    await websocket.close()
+                    return
         except JWTError as e:
-            logger.error("WebSocket JWT error: %s", str(e))
+            logger.error(f"WebSocket JWT error: {str(e)}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected: client_id=%s", client_id)
+        logger.info(f"WebSocket disconnected: client_id={client_id}")
     except Exception as e:
-        logger.error("WebSocket error: %s\n%s", str(e), traceback.format_exc())
+        logger.error(f"WebSocket error: {str(e)}\n{traceback.format_exc(e)}")
         await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
     finally:
         if client_id and client_id in connected_clients:
             del connected_clients[client_id]
-            logger.info("WebSocket disconnected: client_id=%s", client_id)
+            logger.info(f"WebSocket closed: client_id={client_id}")
 
 # ファビコン
 @app.get("/favicon.ico", response_class=FileResponse)
@@ -828,5 +1034,5 @@ async def favicon():
         logger.warning("Favicon not found")
         return Response(status_code=204)
     except Exception as e:
-        logger.error("Error in favicon: %s\n%s", str(e), traceback.format_exc())
+        logger.error(f"Error in favicon: {str(e)}\n{traceback.format_exc(e)}")
         raise HTTPException(status_code=500, detail=f"ファビコン取得に失敗しました: {str(e)}")
