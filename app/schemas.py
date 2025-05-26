@@ -22,7 +22,7 @@ class Shelter(BaseModel):
     longitude: float
     capacity: int = Field(..., ge=0)
     current_occupancy: int = Field(..., ge=0)
-    attributes: Dict  # JSON 互換の辞書（ShelterAttributesの内容）
+    attributes: Dict  # JSON互換の辞書（ShelterAttributesの内容）
     photos: List[str] = []
     contact: Optional[str] = None
     operator: str = Field(..., min_length=1, max_length=255)

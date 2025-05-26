@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, ForeignKey, JSON, Index
+    Column, Integer, String, Float, DateTime, ForeignKey, JSON, Index, LargeBinary
 )
 from sqlalchemy.orm import relationship
 from database import Base
@@ -34,7 +34,7 @@ class Photo(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
-    data = Column(LargeBinary, nullable=True)
+    data = Column(LargeBinary, nullable=True)  # LargeBinaryを正しくインポート
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -43,7 +43,7 @@ class AuditLog(Base):
     user = Column(String, nullable=False)
     action = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-    details = Column(String, nullable=True)  # TextからStringに変更（互換性）
+    details = Column(String, nullable=True)
     shelter = relationship("Shelter", back_populates="audit_logs")
 
 class Company(Base):
