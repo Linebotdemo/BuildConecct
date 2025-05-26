@@ -203,6 +203,88 @@ async def broadcast_shelter_update(data: dict):
     for ws in disconnected:
         connected_clients.discard(ws)
 
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_get(request: Request):
+    try:
+        print(f"Rendering login.html for GET /login")
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": None}
+        )
+    except Exception as e:
+        print(f"Error rendering login.html: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"テンプレートのレンダリングに失敗しました: {str(e)}")
+
+# POST /login (提供されたコードを修正)
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        print(f"Login attempt: username={username}")
+        company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
+        if not company or not pwd_context.verify(password, company.hashed_pw):
+            print(f"Login failed: username={username}, company={company}")
+            return templates.TemplateResponse(
+                "login.html",
+                {"request": request, "error": "メールアドレスまたはパスワードが正しくありません"}
+            )
+
+        access_token_expires = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = jwt.encode(
+            {
+                "sub": company.email,
+                "role": company.role,
+                "exp": access_token_expires
+            },
+            SECRET_KEY,
+            algorithm=ALGORITHM
+        )
+        print(f"Login successful: username={username}, role={company.role}, token={access_token[:10]}...")
+
+        shelters = []
+        logs = []
+        try:
+            if company.role == "admin":
+                shelters = db.query(ShelterModel).all()
+                logs = db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).limit(50).all()
+            else:
+                shelters = db.query(ShelterModel).filter(ShelterModel.operator == company.name).all()
+        except Exception as e:
+            print(f"Error fetching shelters/logs in login_post: {str(e)}")
+
+        template_name = "admin.html" if company.role == "admin" else "company-dashboard.html"
+        try:
+            template_response = templates.TemplateResponse(
+                template_name,
+                {
+                    "request": request,
+                    "company": company,
+                    "token": access_token,
+                    "shelters": shelters,
+                    "logs": logs if company.role == "admin" else [],
+                    "api_url": "/api",
+                    "ws_url": "wss://safeshelter.onrender.com/ws/shelters",
+                    "YAHOO_APPID": os.getenv("YAHOO_APPID")
+                }
+            )
+            template_response.set_cookie(key="token", value=access_token, httponly=True, secure=True)
+            return template_response
+        except Exception as e:
+            print(f"Error rendering {template_name}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"テンプレートのレンダリングに失敗しました: {str(e)}")
+
+    except Exception as e:
+        print(f"Error in login_post: {str(e)}")
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": f"ログインに失敗しました: {str(e)}"}
+        )
+
 # /register エンドポイント（GET: 認証フォーム表示, POST: パスワード検証）
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
