@@ -9,6 +9,9 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session  # 同期セッション用
 
+# schemas から CompanySchema をインポート
+from schemas import CompanySchema
+
 print("→ LOADING utils.py (no create_all)")
 from database import get_db
 from models import Company as CompanyModel
