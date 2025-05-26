@@ -17,6 +17,8 @@ import os, json, uuid, traceback, aiohttp, httpx, io
 from sqlalchemy.sql import insert, select
 import sys
 from pydantic import ValidationError
+from sqlalchemy.future import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # デバッグ用ログ
 print("cwd =", os.getcwd())
@@ -118,32 +120,32 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/company-token")
 connected_clients: set[WebSocket] = set()
 
 # トークン検証（企業または管理者）
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="トークンが無効です",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        print(f"Received token: {token[:10]}...")  # デバッグ: トークンの先頭10文字
+        print(f"Received token: {token[:10]}...")  # デバッグ
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         role: str = payload.get("role")
         exp: int = payload.get("exp")
-        print(f"Decoded payload: sub={email}, role={role}, exp={exp}")  # デバッグ: ペイロード詳細
-        print(f"Checking conditions: email={email}, role in ['company', 'admin']={role in ['company', 'admin']}")  # デバッグ: 条件チェック
+        print(f"Decoded payload: sub={email}, role={role}, exp={exp}")  # デバッグ
         if email is None or role not in ["company", "admin"]:
             print(f"Invalid email or role: email={email}, role={role}")
             raise credentials_exception
         if exp is None or datetime.utcnow().timestamp() > exp:
             print(f"Token expired: exp={exp}, current={datetime.utcnow().timestamp()}")
             raise credentials_exception
-        company = db.query(CompanyModel).filter(CompanyModel.email == email).first()
-        print(f"Company query result: {company}")  # デバッグ: クエリ結果
+        result = await db.execute(select(CompanyModel).filter(CompanyModel.email == email))
+        company = result.scalars().first()
+        print(f"Company query result: {company}")  # デバッグ
         if company is None:
             print(f"No company found for email: {email}")
             raise credentials_exception
-        print(f"Authenticated user: email={company.email}, role={company.role}, id={company.id}")  # デバッグ: 認証成功
+        print(f"Authenticated user: email={company.email}, role={company.role}, id={company.id}")  # デバッグ
         return company
     except JWTError as e:
         print(f"JWT decode error: {str(e)}")
@@ -294,11 +296,14 @@ async def login_post(
 @app.get("/api/shelters", response_model=List[ShelterSchema])
 async def get_shelters(
     search: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)  # Session -> AsyncSession
 ):
     try:
-        query = db.query(ShelterModel)
-        shelters = query.all()
+        query = select(ShelterModel)  # db.query -> select
+        if search:
+            query = query.filter(ShelterModel.name.ilike(f"%{search}%"))
+        result = await db.execute(query)  # await db.execute
+        shelters = result.scalars().all()
         return shelters
     except Exception as e:
         print(f"Error in get_shelters: {str(e)}")
