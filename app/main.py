@@ -50,24 +50,31 @@ app = FastAPI()
 # スタートアップイベント
 @app.on_event("startup")
 async def on_startup():
+    print("Starting database initialization...")
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)  # テーブル作成を有効化
-    db = SessionLocal()
-    try:
-        admin = db.query(CompanyModel).filter(CompanyModel.email == "admin").first()
-        print(f"Admin check: {admin}")  # デバッグ
-        if not admin:
-            hashed_pw = pwd_context.hash("admin123")
-            admin = CompanyModel(email="admin", name="管理者", hashed_pw=hashed_pw, role="admin")
-            db.add(admin)
-            db.commit()
-            print("Admin account created successfully")
-        else:
-            print(f"Admin account exists: email={admin.email}, role={admin.role}")
-    except Exception as e:
-        print(f"Error creating admin account: {str(e)}")
-    finally:
-        db.close()
+        await conn.run_sync(Base.metadata.create_all)  # テーブル作成
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await db.execute(select(CompanyModel).filter(CompanyModel.email == "admin@example.com"))
+            admin = result.scalars().first()
+            print(f"Admin check: {admin}")
+            if not admin:
+                hashed_pw = pwd_context.hash("admin123")
+                admin = CompanyModel(
+                    email="admin@example.com",
+                    name="管理者",
+                    hashed_pw=hashed_pw,
+                    role="admin",
+                    created_at=datetime.utcnow()
+                )
+                db.add(admin)
+                await db.commit()
+                print("Admin account created successfully")
+            else:
+                print(f"Admin account exists: email={admin.email}, role={admin.role}")
+        except Exception as e:
+            print(f"Error creating admin account: {str(e)}")
+            raise
 
 # 企業登録／一覧 用 API をマウント
 app.include_router(company_router)
@@ -80,7 +87,7 @@ YAHOO_APPID = os.getenv("YAHOO_APPID")
 REG_PASS = os.getenv("REG_PASS")  # 認証パスワード
 print(f"YAHOO_APPID: {YAHOO_APPID}")  # デバッグ: 環境変数確認
 print(f"REG_PASS: {REG_PASS}")  # デバッグ: 環境変数確認
-print(f"JWT_SECRET_KEY: {os.getenv('JWT_SECRET_KEY')[:10]}...")  # デバッグ: キー確認（部分）
+print(f"JWT_SECRET_KEY: {os.getenv('JWT_SECRET_KEY')[:10]}...")
 
 # 静的ファイル・テンプレート設定
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -520,7 +527,7 @@ async def upload_photo(
 @company_router.post("/api/companies", response_model=CompanySchema)
 async def create_company(company: CompanySchema, db: Session = Depends(get_db)):
     try:
-        print(f"Received company data: {company.dict()}")  # デバッグ
+        print(f"Received company data: {company.dict()}")
         existing_company = db.query(CompanyModel).filter(
             (CompanyModel.email == company.email) | (CompanyModel.name == company.name)
         ).first()
@@ -533,12 +540,12 @@ async def create_company(company: CompanySchema, db: Session = Depends(get_db)):
             name=company.name,
             email=company.email,
             hashed_pw=pwd_context.hash(company.password),
-            role=company.role  # role を設定
+            role=company.role
         )
         db.add(db_company)
         db.commit()
         db.refresh(db_company)
-        print(f"Company created: email={db_company.email}, role={db_company.role}")  # デバッグ
+        print(f"Company created: email={db_company.email}, role={db_company.role}")
         return db_company
     except ValidationError as e:
         print(f"Validation error: {e.errors()}")
