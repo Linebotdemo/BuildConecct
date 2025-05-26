@@ -1,61 +1,60 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 
 class ShelterAttributes(BaseModel):
-    pets_allowed: bool
-    barrier_free: bool
-    toilet_available: bool
-    food_available: bool
-    medical_available: bool
-    wifi_available: bool
-    charging_available: bool
+    pets_allowed: bool = False
+    barrier_free: bool = False
+    toilet_available: bool = False
+    food_available: bool = False
+    medical_available: bool = False
+    wifi_available: bool = False
+    charging_available: bool = False
 
     class Config:
         from_attributes = True
 
 class Shelter(BaseModel):
     id: Optional[int] = None
-    name: str
+    name: str = Field(..., min_length=1, max_length=255)
     address: str = Field(..., min_length=1, max_length=255)
     latitude: float
     longitude: float
-    capacity: int
-    current_occupancy: int
-    attributes: ShelterAttributes
-    photos: List[str]
-    contact: str
-    operator: str
+    capacity: int = Field(..., ge=0)
+    current_occupancy: int = Field(..., ge=0)
+    attributes: Dict  # JSON 互換の辞書（ShelterAttributesの内容）
+    photos: List[str] = []
+    contact: Optional[str] = None
+    operator: str = Field(..., min_length=1, max_length=255)
     opened_at: datetime
-    status: str
+    status: str = Field(..., pattern="^(open|closed)$")
     updated_at: Optional[datetime] = None
-    created_by: Optional[str] = None
-    owner_id: Optional[int] = None
+    company_id: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+class ShelterUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    address: Optional[str] = Field(None, min_length=1, max_length=255)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    capacity: Optional[int] = Field(None, ge=0)
+    current_occupancy: Optional[int] = Field(None, ge=0)
+    attributes: Optional[Dict] = None
+    photos: Optional[List[str]] = None
+    contact: Optional[str] = None
+    operator: Optional[str] = Field(None, min_length=1, max_length=255)
+    opened_at: Optional[datetime] = None
+    status: Optional[str] = Field(None, pattern="^(open|closed)$")
 
     class Config:
         from_attributes = True
 
 class BulkUpdateRequest(BaseModel):
     shelter_ids: List[int]
-    status: Optional[str] = None
-    current_occupancy: Optional[int] = None
-
-    class Config:
-        from_attributes = True
-
-class ShelterUpdate(BaseModel):
-    name: Optional[str] = None
-    address: Optional[str] = Field(None, min_length=1, max_length=255)
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    capacity: Optional[int] = None
-    current_occupancy: Optional[int] = None
-    attributes: Optional[ShelterAttributes] = None
-    photos: Optional[List[str]] = None
-    contact: Optional[str] = None
-    operator: Optional[str] = None
-    opened_at: Optional[datetime] = None
-    status: Optional[str] = None
+    status: Optional[str] = Field(None, pattern="^(open|closed)$")
+    current_occupancy: Optional[int] = Field(None, ge=0)
 
     class Config:
         from_attributes = True
@@ -66,6 +65,7 @@ class AuditLog(BaseModel):
     shelter_id: Optional[int] = None
     user: str
     timestamp: datetime
+    details: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -73,11 +73,11 @@ class AuditLog(BaseModel):
 class CompanySchema(BaseModel):
     id: Optional[int] = None
     name: str = Field(..., min_length=1, max_length=255)
-    email: EmailStr = Field(...)
-    password: str = Field(..., min_length=6)
-    role: str = Field(default="company", pattern="^(company|admin)$")  # 追加
+    email: EmailStr
+    password: Optional[str] = Field(None, min_length=6)
+    role: str = Field(default="company", pattern="^(company|admin)$")
     hashed_pw: Optional[str] = None
-    created_at: Optional[datetime] = None  # 追加
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

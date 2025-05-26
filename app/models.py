@@ -1,34 +1,26 @@
 from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Index, LargeBinary
+    Column, Integer, String, Float, DateTime, ForeignKey, JSON, Index
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from database import Base
-from datetime import datetime  # 追加: datetime モジュールをインポート
+from datetime import datetime
 
 class Shelter(Base):
     __tablename__ = "shelters"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    address = Column(String)
-    latitude = Column(Float)
-    longitude = Column(Float)
-    capacity = Column(Integer)
-    current_occupancy = Column(Integer, default=0)
-    pets_allowed = Column(Boolean, default=False)
-    barrier_free = Column(Boolean, default=False)
-    toilet_available = Column(Boolean, default=False)
-    food_available = Column(Boolean, default=False)
-    medical_available = Column(Boolean, default=False)
-    wifi_available = Column(Boolean, default=False)
-    charging_available = Column(Boolean, default=False)
-    equipment = Column(Text)
-    photos = Column(Text)
-    contact = Column(String)
-    operator = Column(String)
-    opened_at = Column(DateTime)
-    status = Column(String, default="open")
-    updated_at = Column(DateTime, default=datetime.utcnow)  # datetime を使用
+    name = Column(String, index=True, nullable=False)
+    address = Column(String, nullable=False)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    capacity = Column(Integer, nullable=False)
+    current_occupancy = Column(Integer, default=0, nullable=False)
+    attributes = Column(JSON, default={}, nullable=False)  # JSON型で属性を保存
+    photos = Column(String, default="")  # カンマ区切りの文字列
+    contact = Column(String, nullable=True)
+    operator = Column(String, nullable=False)
+    opened_at = Column(DateTime, nullable=False)
+    status = Column(String, default="open", nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
 
     audit_logs = relationship("AuditLog", back_populates="shelter")
@@ -51,7 +43,7 @@ class AuditLog(Base):
     user = Column(String, nullable=False)
     action = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-    details = Column(Text)
+    details = Column(String, nullable=True)  # TextからStringに変更（互換性）
     shelter = relationship("Shelter", back_populates="audit_logs")
 
 class Company(Base):
@@ -60,5 +52,5 @@ class Company(Base):
     name = Column(String, unique=True, nullable=False)
     email = Column(String, unique=True, nullable=False)
     hashed_pw = Column(String, nullable=False)
-    role = Column(String(50), default="company")  # "company" または "admin"
-    created_at = Column(DateTime, nullable=False, server_default=func.now())
+    role = Column(String, default="company", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
