@@ -906,14 +906,20 @@ def upload_photo_binary(
     return {"filename": file.filename, "id": result.inserted_primary_key[0]}
 
 @app.websocket("/ws/shelters")
-async def websocket_endpoint(ws: WebSocket):
-    await ws.accept()
-    connected_clients.add(ws)
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    token = websocket.query_params.get("token")
     try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if not email:
+            await websocket.close(code=1008)
+            return
         while True:
-            await ws.receive_text()
-    except:
-        connected_clients.discard(ws)
+            data = await websocket.receive_text()
+            await websocket.send_text(f"更新: {data}")
+    except Exception as e:
+        await websocket.close(code=1008)
 
 @app.get("/favicon.ico", response_class=FileResponse)
 def favicon():
