@@ -1,1 +1,1 @@
--e "#!/bin/bash\npip uninstall psycopg2 psycopg2-binary -y\npip install -r requirements.txt" 
+-e "#!/bin/bash\npip uninstall asyncpg -y\npip install -r requirements.txt" 
