@@ -1,56 +1,39 @@
-@app.post("/login", response_class=HTMLResponse)
-async def login_post(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    try:
-        shelters = []
-        logs = []
-        try:
-            shelters = db.query(ShelterModel).all()
-            logs = db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).limit(50).all()
-        except Exception as e:
-            print(f"Error fetching shelters/logs in login_post: {str(e)}")
-        
-        company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
-        if company and pwd_context.verify(password, company.hashed_pw):
-            access_token_expires = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-            access_token = jwt.encode(
-                {
-                    "sub": company.email,
-                    "role": company.role,
-                    "exp": access_token_expires
-                },
-                SECRET_KEY,
-                algorithm=ALGORITHM
-            )
-            template_name = "admin.html" if company.role == "admin" else "company-dashboard.html"
-            template_response = templates.TemplateResponse(
-                template_name,
-                {
-                    "request": request,
-                    "company": company,
-                    "token": access_token,
-                    "shelters": shelters if company.role == "admin" else db.query(ShelterModel).filter(ShelterModel.operator == company.name).all(),
-                    "logs": logs if company.role == "admin" else [],
-                    "api_url": "/api",
-                    "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://safeshelter.onrender.com/ws/shelters",
-                    "YAHOO_APPID": os.getenv("YAHOO_APPID")
-                }
-            )
-            template_response.set_cookie(key="token", value=access_token)
-            return template_response
-
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "メールアドレスまたはパスワードが正しくありません"}
-        )
-
-    except Exception as e:
-        print(f"Error in login_post: {str(e)}")
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": f"ログインに失敗しました: {str(e)}"}
-        )
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - 避難所管理システム</title>
+    <link href="/static/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/styles.css" rel="stylesheet">
+    <link rel="icon" href="/favicon.ico">
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-6">
+                <h2 class="text-center mb-4">避難所管理システム - ログイン</h2>
+                {% if error %}
+                    <div class="alert alert-danger" role="alert">
+                        {{ error }}
+                    </div>
+                {% endif %}
+                <form method="POST" action="/login">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">メールアドレス</label>
+                        <input type="email" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">パスワード</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">ログイン</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="/static/bootstrap.bundle.min.js"></script>
+</body>
+</html>
