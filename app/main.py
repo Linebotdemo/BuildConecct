@@ -83,18 +83,22 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 ENV = os.getenv("ENV", "production")
+TEMPLATE_DIR = os.getenv("TEMPLATE_DIR", "app/templates")
 
-logger.info("YAHOO_APPID: %s", YAHOO_APPID)
-logger.info("REG_PASS: %s", "*" * len(REG_PASS) if REG_PASS else "Not set")
-logger.info("JWT_SECRET_KEY: %s...", SECRET_KEY[:10])
-logger.info("ENV: %s", ENV)
+# テンプレートディレクトリ確認
+try:
+    os.makedirs(TEMPLATE_DIR, exist_ok=True)
+    logger.info("Template directory: %s", os.path.abspath(TEMPLATE_DIR))
+    logger.info("Available templates: %s", os.listdir(TEMPLATE_DIR))
+except Exception as e:
+    logger.error("Error accessing template directory: %s", str(e))
 
 # 静的ファイル・テンプレート設定
-os.makedirs("app/static", exist_ok=True)  # Create app/static if it doesn't exist
-os.makedirs("app/data", exist_ok=True)    # Create app/data if it doesn't exist
+os.makedirs("app/static", exist_ok=True)
+os.makedirs("app/data", exist_ok=True)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/data", StaticFiles(directory="app/data"), name="data")
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
 connected_clients: Dict[str, WebSocket] = {}
 
 # CORS設定
@@ -240,6 +244,11 @@ async def broadcast_shelter_update(data: dict):
 async def login_get(request: Request):
     try:
         logger.info("Rendering login.html for GET /login")
+        # テンプレートファイルの存在確認
+        template_path = os.path.join(TEMPLATE_DIR, "login.html")
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": None},
@@ -290,6 +299,10 @@ async def login_post(
             logger.error("Error fetching shelters/logs: %s\n%s", str(e), traceback.format_exc())
 
         template_name = "admin.html" if company.role == "admin" else "company-dashboard.html"
+        template_path = os.path.join(TEMPLATE_DIR, template_name)
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         template_response = templates.TemplateResponse(
             template_name,
             {
@@ -318,6 +331,10 @@ async def register_page(request: Request):
     if not REG_PASS:
         logger.error("REG_PASS is not set")
         raise HTTPException(status_code=500, detail="認証パスワードが設定されていません")
+    template_path = os.path.join(TEMPLATE_DIR, "register_auth.html")
+    if not os.path.exists(template_path):
+        logger.error("Template file not found: %s", template_path)
+        raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
     return templates.TemplateResponse("register_auth.html", {"request": request})
 
 # 登録認証処理（POST）
@@ -332,6 +349,10 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
             "register_auth.html",
             {"request": request, "error": "パスワードが正しくありません"},
         )
+    template_path = os.path.join(TEMPLATE_DIR, "register.html")
+    if not os.path.exists(template_path):
+        logger.error("Template file not found: %s", template_path)
+        raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
     return templates.TemplateResponse(
         "register.html",
         {"request": request, "companies": []},
@@ -873,6 +894,10 @@ async def get_disaster_alerts():
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
         logger.info("Rendering index.html")
+        template_path = os.path.join(TEMPLATE_DIR, "index.html")
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         shelters = []
         shelters_orm = db.query(ShelterModel).all()
         for s in shelters_orm:
@@ -927,6 +952,10 @@ async def company_dashboard_page(
 ):
     try:
         logger.info("Rendering company-dashboard.html for user=%s", current_user.email)
+        template_path = os.path.join(TEMPLATE_DIR, "company-dashboard.html")
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         shelters = db.query(ShelterModel).filter(ShelterModel.operator == current_user.name).all()
         token = request.cookies.get("token")
         if not token:
@@ -953,6 +982,10 @@ async def company_dashboard_page(
 async def logout_page(request: Request):
     try:
         logger.info("Logging out")
+        template_path = os.path.join(TEMPLATE_DIR, "login.html")
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         response = templates.TemplateResponse("login.html", {"request": request})
         response.delete_cookie("token")
         return response
