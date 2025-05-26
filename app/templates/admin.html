@@ -498,7 +498,7 @@
       initAdminMap();
       fetchShelters();
       // WebSocket 接続
-      const ws = new WebSocket(`${wsUrl}/shelters?token=${encodeURIComponent(authToken)}`);
+      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(authToken)}`);
       ws.onopen = () => console.log('WebSocket connected');
       ws.onmessage = () => {
         console.log('WebSocket message received');
