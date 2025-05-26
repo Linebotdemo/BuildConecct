@@ -314,8 +314,8 @@ async function fetchShelters() {
             }
         });
         if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.detail || `HTTP ${res.status}`);
+            const errorData = await res.text(); // JSON でない場合を考慮
+            throw new Error(errorData || `HTTP ${res.status}`);
         }
         const shelters = await res.json();
         const list = document.getElementById('admin-shelter-list');
@@ -364,7 +364,6 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
     let latitude = parseFloat(fd.get('latitude'));
     let longitude = parseFloat(fd.get('longitude'));
 
-    // ジオコーディングで緯度経度を取得（未設定の場合）
     if (!latitude || !longitude) {
         try {
             const geoData = await geocode(address);
@@ -391,7 +390,7 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
             medical_available: fd.get('medical_available') === 'on',
             wifi_available: fd.get('wifi_available') === 'on',
             charging_available: fd.get('charging_available') === 'on',
-            equipment: fd.get('equipment')?.trim() || null  // equipment フィールドを追加
+            equipment: fd.get('equipment')?.trim() || null
         },
         photos: [],
         contact: fd.get('contact').trim() || null,
