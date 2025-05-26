@@ -1,34 +1,56 @@
-<!-- templates/login.html -->
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>ログイン - 日本版 Smart Shelter</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
-</head>
-<body>
-    <h1>ログイン</h1>
-    {% if error %}
-        <p style="color: red;">{{ error }}</p>
-    {% endif %}
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    try:
+        shelters = []
+        logs = []
+        try:
+            shelters = db.query(ShelterModel).all()
+            logs = db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).limit(50).all()
+        except Exception as e:
+            print(f"Error fetching shelters/logs in login_post: {str(e)}")
+        
+        company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
+        if company and pwd_context.verify(password, company.hashed_pw):
+            access_token_expires = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            access_token = jwt.encode(
+                {
+                    "sub": company.email,
+                    "role": company.role,
+                    "exp": access_token_expires
+                },
+                SECRET_KEY,
+                algorithm=ALGORITHM
+            )
+            template_name = "admin.html" if company.role == "admin" else "company-dashboard.html"
+            template_response = templates.TemplateResponse(
+                template_name,
+                {
+                    "request": request,
+                    "company": company,
+                    "token": access_token,
+                    "shelters": shelters if company.role == "admin" else db.query(ShelterModel).filter(ShelterModel.operator == company.name).all(),
+                    "logs": logs if company.role == "admin" else [],
+                    "api_url": "/api",
+                    "ws_url": "ws://localhost:8000/ws/shelters" if os.getenv("ENV") == "local" else "wss://safeshelter.onrender.com/ws/shelters",
+                    "YAHOO_APPID": os.getenv("YAHOO_APPID")
+                }
+            )
+            template_response.set_cookie(key="token", value=access_token)
+            return template_response
 
-    <!-- 管理者ログイン -->
-    <h2>管理者ログイン（自治体向け）</h2>
-    <form method="post" action="/login">
-        <label>ユーザー名: <input type="text" name="username" value="admin" required></label><br>
-        <label>パスワード: <input type="password" name="password" required></label><br>
-        <button type="submit">管理者ログイン</button>
-    </form>
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "メールアドレスまたはパスワードが正しくありません"}
+        )
 
-    <!-- 企業ログイン -->
-    <h2>企業ログイン</h2>
-    <form method="post" action="/login">
-        <label>メールアドレス: <input type="email" name="username" required></label><br>
-        <label>パスワード: <input type="password" name="password" required></label><br>
-        <button type="submit">企業ログイン</button>
-    </form>
-
-    <p><a href="/register">企業アカウントを登録</a></p>
-</body>
-</html>
+    except Exception as e:
+        print(f"Error in login_post: {str(e)}")
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": f"ログインに失敗しました: {str(e)}"}
+        )

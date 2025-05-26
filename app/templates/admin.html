@@ -206,211 +206,118 @@
     const YAHOO_APPID = "dj00aiZpPWoyQVc5RXVkQWhXQyZzPWNvbnN1bWVyc2VjcmV0";
 // ① サーバーに叩きにいくヘルパー関数
 async function geocode(address) {
-  const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
-  if (!res.ok) {
-    const detail = await res.json();
-    throw new Error(detail.detail || `HTTP ${res.status}`);
-  }
-  return await res.json();  // { lat, lon }
+    const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+    if (!res.ok) {
+        const detail = await res.json();
+        throw new Error(detail.detail || `HTTP ${res.status}`);
+    }
+    return await res.json(); // { lat, lon }
 }
 
 async function updateAdminMapPin(id, address) {
-  try {
-    const { lat, lon } = await geocode(address);
-    document.querySelector('input[name="latitude"]').value  = lat;
-    document.querySelector('input[name="longitude"]').value = lon;
-    let marker = adminMarkers[id];
-    if (!marker) {
-      marker = L.marker([lat, lon]).addTo(adminMap);
-      adminMarkers[id] = marker;
-    } else {
-      marker.setLatLng([lat, lon]);
+    try {
+        const data = await geocode(address);
+        document.querySelector('input[name="latitude"]').value = data.lat;
+        document.querySelector('input[name="longitude"]').value = data.lon;
+        let marker = adminMarkers[id];
+        if (!marker) {
+            marker = L.marker([data.lat, data.lon]).addTo(adminMap);
+            adminMarkers[id] = marker;
+        } else {
+            marker.setLatLng([data.lat, data.lon]);
+        }
+        adminMap.flyTo([data.lat, data.lon], 14);
+    } catch (err) {
+        console.error('ジオコーディングエラー:', err);
+        alert(`ジオコーディング失敗: ${err.message}`);
     }
-    adminMap.flyTo([lat, lon], 14);
-  } catch (err) {
-    console.error('ジオコーディングエラー:', err);
-    alert(`ジオコーディング取得失敗: ${err.message}`);
-  }
 }
 
-
-
-    // ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-    // ┃ 管理画面スクリプト（既存ロジック） ┃
-    // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-    const token  = '{{ token }}';
-    const apiUrl = '{{ api_url }}';
-    const wsUrl  = '{{ ws_url }}';
-    let adminMap, adminMarkers = {};
-
-    // ページ初期化
-    document.addEventListener('DOMContentLoaded', () => {
-      initAdminMap();
-      fetchShelters();
-      const ws = new WebSocket(wsUrl + '?token=' + token);
-      ws.onmessage = () => fetchShelters();
-    });
-
-    // マップ初期化
-    function initAdminMap() {
-      adminMap = L.map('admin-map').setView([35.6762, 139.6503], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(adminMap);
+document.addEventListener('DOMContentLoaded', () => {
+    if (!token) {
+        alert('ログインしてください');
+        window.location.href = '/login';
+        return;
     }
-
-    // 避難所一覧取得→リスト／マーカー更新
-    async function fetchShelters() {
-      const res = await fetch(apiUrl + '/shelters', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!res.ok) return alert('避難所取得エラー');
-      const list = await res.json();
-      // リスト描画
-      const container = document.getElementById('admin-shelter-list');
-      container.innerHTML = list.map(s => `
-        <div class="card mb-2 shelter" data-id="${s.id}">
-          <div class="card-body">
-            <input type="checkbox" class="form-check-input shelter-checkbox me-2" value="${s.id}">
-            <strong>${s.name}</strong> (${s.status}, ${s.current_occupancy}/${s.capacity})
-            <button class="btn btn-sm btn-outline-primary float-end me-1" onclick="editForm(${s.id})">編集</button>
-            <button class="btn btn-sm btn-outline-danger float-end" onclick="deleteShelter(${s.id})">削除</button>
-          </div>
-        </div>
-      `).join('');
-      // マーカー更新
-      Object.values(adminMarkers).forEach(m => adminMap.removeLayer(m));
-      adminMarkers = {};
-      list.forEach(s => {
-        const m = L.marker([s.latitude, s.longitude]).addTo(adminMap)
-          .bindPopup(`${s.name}<br>${s.address}`);
-        adminMarkers[s.id] = m;
-      });
-    }
-
-document.getElementById('add-shelter-form').addEventListener('submit', async e => {
-  e.preventDefault();
-
-  // フォームの全フィールドを取得
-  const fd = new FormData(e.target);
-
-  // ── ① payload を必ずここで定義 ──
-  const payload = {
-    name:              fd.get('name'),
-    address:           fd.get('address'),
-    latitude:          +fd.get('latitude')  || 35.6762,
-    longitude:         +fd.get('longitude') || 139.6503,
-    capacity:          +fd.get('capacity'),
-    current_occupancy: +fd.get('current_occupancy'),
-    attributes: {
-      pets_allowed:       fd.get('pets_allowed')     === 'on',
-      barrier_free:       fd.get('barrier_free')     === 'on',
-      toilet_available:   fd.get('toilet_available') === 'on',
-      food_available:     fd.get('food_available')   === 'on',
-      medical_available:  fd.get('medical_available')=== 'on',
-      wifi_available:     fd.get('wifi_available')   === 'on',
-      charging_available: fd.get('charging_available')==='on'
-    },
-    photos:    [],  // 最初は空配列
-    contact:   fd.get('contact'),
-    operator:  fd.get('operator'),
-    opened_at: fd.get('opened_at')
-                 ? new Date(fd.get('opened_at')).toISOString()
-                 : new Date().toISOString(),
-    status:    fd.get('status')
-  };
-
-  // ── ② 避難所レコードを作成 ──
-  const res = await fetch(apiUrl + '/shelters', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type':  'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) {
-    return alert(`避難所作成に失敗しました (${res.status})`);
-  }
-  const s = await res.json();
-
-  // ── ③ 作成したIDを使って複数画像をアップロード ──
-  const fileInput = e.target.querySelector('input[name="photos"]');
-  const files = fileInput.files;
-  if (files.length > 0) {
-    const pfd = new FormData();
-    pfd.append('shelter_id', s.id);
-    // バックエンドが "files: List[UploadFile]" で受け取るなら key は 'files'
-    for (const file of files) {
-      pfd.append('files', file);
-    }
-    const upRes = await fetch(apiUrl + '/shelters/upload-photos', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: pfd
-    });
-    if (!upRes.ok) {
-      console.error('写真アップロード失敗:', await upRes.text());
-    }
-  }
-
-  // ── ④ 完了後リセット＆一覧再取得 ──
-  e.target.reset();
-  fetchShelters();
+    console.log('Admin token:', token); // デバッグ
+    initAdminMap();
+    fetchShelters();
+    const ws = new WebSocket(wsUrl + '/shelters?token=' + encodeURIComponent(token));
+    ws.onmessage = () => fetchShelters();
 });
 
-
-    function editForm(id) {
-      location.href = `/admin/shelters/${id}/edit`;
+document.getElementById('add-shelter-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!token) {
+        alert('ログインしてください');
+        window.location.href = '/login';
+        return;
     }
-
-    async function deleteShelter(id) {
-      if (!confirm('削除しますか？')) return;
-      const res = await fetch(`${apiUrl}/shelters/${id}`, {
-        method:  'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) fetchShelters();
-      else alert('削除に失敗しました');
-    }
-
-    async function bulkUpdate() {
-      const ids = Array.from(document.querySelectorAll('.shelter-checkbox:checked')).map(cb => +cb.value);
-      if (!ids.length) return alert('避難所を選択してください');
-      const status = document.getElementById('bulk-status').value;
-      const occ    = document.getElementById('bulk-occupancy').value;
-      if (!status && !occ) return alert('更新内容を指定してください');
-
-      const body = { shelter_ids: ids };
-      if (status) body.status = status;
-      if (occ)    body.current_occupancy = +occ;
-
-      const res = await fetch(apiUrl + '/shelters/bulk-update', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type':  'application/json'
+    const fd = new FormData(e.target);
+    const payload = {
+        name: fd.get('name').trim(),
+        address: fd.get('address').trim(),
+        latitude: parseFloat(fd.get('latitude')) || 0,
+        longitude: parseFloat(fd.get('longitude')) || 0,
+        capacity: Number(fd.get('capacity')) || 0,
+        current_occupancy: Number(fd.get('current_occupancy')) || 0,
+        attributes: {
+            pets_allowed: fd.get('pets_allowed') === 'on',
+            barrier_free: fd.get('barrier_free') === 'on',
+            toilet_available: fd.get('toilet_available') === 'on',
+            food_available: fd.get('food_available') === 'on',
+            medical_available: fd.get('medical_available') === 'on',
+            wifi_available: fd.get('wifi_available') === 'on',
+            charging_available: fd.get('charging_available') === 'on'
         },
-        body: JSON.stringify(body)
-      });
-      if (res.ok) fetchShelters();
-      else alert('一括更新に失敗しました');
+        photos: [],
+        contact: fd.get('contact').trim() || '',
+        operator: fd.get('operator').trim() || '自治体',
+        opened_at: fd.get('opened_at') ? new Date(fd.get('opened_at')).toISOString() : new Date().toISOString(),
+        status: fd.get('status') || 'open'
+    };
+    console.log('Shelter payload:', payload); // デバッグ
+    try {
+        const res = await fetch(apiUrl + '/shelters', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const error = await res.json();
+            console.error('Shelter creation error:', error);
+            throw new Error(error.detail || `避難所作成に失敗しました (${res.status})`);
+        }
+        const shelter = await res.json();
+        const fileInput = e.target.querySelector('input[name="photos"]');
+        const files = fileInput.files;
+        if (files.length > 0) {
+            const pfd = new FormData();
+            pfd.append('shelter_id', shelter.id);
+            for (const file of files) {
+                pfd.append('files', file);
+            }
+            const upRes = await fetch(apiUrl + '/shelters/upload-photos', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: pfd
+            });
+            if (!upRes.ok) {
+                console.error('Photo upload error:', await upRes.text());
+                alert('写真アップロードに失敗しました');
+            }
+        }
+        e.target.reset();
+        fetchShelters();
+        alert('避難所が作成されました');
+    } catch (error) {
+        console.error('Create shelter error:', error);
+        alert(`避難所作成に失敗しました: ${error.message}`);
     }
-
-    async function bulkDelete() {
-      const ids = Array.from(document.querySelectorAll('.shelter-checkbox:checked')).map(cb => +cb.value);
-      if (!ids.length) return alert('避難所を選択してください');
-      if (!confirm('選択した避難所を削除しますか？')) return;
-
-      const res = await fetch(apiUrl + '/shelters/bulk-delete', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type':  'application/json'
-        },
-        body: JSON.stringify(ids)
-      });
-      if (res.ok) fetchShelters();
-      else alert('一括削除に失敗しました');
-    }
-  </script>
+});
+</script>
 </body>
 </html>

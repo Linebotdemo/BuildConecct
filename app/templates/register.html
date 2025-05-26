@@ -2,81 +2,107 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>企業登録 - 日本版 Smart Shelter</title>
+  <title>自治体登録 - 日本版 Smart Shelter</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 </head>
 <body>
-  <h1>企業アカウント登録</h1>
+  <h1>自治体アカウント登録</h1>
   <form id="register-form">
-    <label>企業名:
-      <input type="text" name="name" required>
+    <label>自治体名:
+      <input type="text" name="name" required maxlength="255" minlength="1">
     </label><br>
     <label>メールアドレス:
-      <input type="email" name="email" required>
+      <input type="email" name="email" required pattern="[^\s@]+@[^\s@]+\.[^\s@]+">
     </label><br>
-    <label>パスワード:
-      <input type="password" name="password" required>
+    <label>パスワード (6文字以上):
+      <input type="password" name="password" required minlength="6">
     </label><br>
     <button type="submit">登録</button>
   </form>
+  <div id="error-message" style="color: red;"></div>
   <hr>
-  <h2>登録済み企業一覧</h2>
+  <h2>登録済み自治体一覧</h2>
   <ul id="company-list">
     <li>読み込み中…</li>
   </ul>
   <script>
     document.getElementById("register-form").addEventListener("submit", async e => {
       e.preventDefault();
+      const errorDiv = document.getElementById("error-message");
+      errorDiv.textContent = "";
       const fd = new FormData(e.target);
       const payload = {
         name: fd.get("name").trim(),
         email: fd.get("email").trim(),
         password: fd.get("password").trim()
       };
+      console.log('Sending payload:', payload);
       if (!payload.name || !payload.email || !payload.password) {
-        alert("すべてのフィールドを入力してください");
+        errorDiv.textContent = "すべてのフィールドを入力してください";
         return;
       }
-      if (!payload.email.includes('@') || !payload.email.includes('.')) {
-        alert("有効なメールアドレスを入力してください");
+      if (payload.name.length > 255) {
+        errorDiv.textContent = "自治体名は255文字以内で入力してください";
         return;
       }
-      console.log('Sending payload:', payload); // デバッグ
-      const res = await fetch("/api/companies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) {
-        const detail = await res.json().catch(_ => null);
-        console.error('Error response:', detail); // デバッグ
-        if (detail?.detail?.includes("既に登録されています")) {
-          alert("この企業名またはメールアドレスは既に登録されています");
-        } else {
-          alert("登録失敗: " + (detail?.detail || res.status));
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(payload.email)) {
+        errorDiv.textContent = "有効なメールアドレスを入力してください";
+        return;
+      }
+      if (payload.password.length < 6) {
+        errorDiv.textContent = "パスワードは6文字以上で入力してください";
+        return;
+      }
+      try {
+        const res = await fetch("/api/companies/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const detail = await res.json().catch(_ => ({ detail: "不明なエラー" }));
+          console.error('Error response:', detail);
+          if (detail?.detail?.includes("既に登録されています")) {
+            errorDiv.textContent = "この自治体名またはメールアドレスは既に登録されています";
+          } else {
+            const errorMsg = Array.isArray(detail.detail)
+              ? detail.detail.map(err => `${err.loc.join('.')}: ${err.msg}`).join("; ")
+              : detail.detail || `HTTP ${res.status}`;
+            errorDiv.textContent = `登録失敗: ${errorMsg}`;
+          }
+          return;
         }
-        return;
+        alert("登録完了！　一覧を更新します。");
+        e.target.reset();
+        loadCompanies();
+      } catch (error) {
+        console.error('Fetch error:', error);
+        errorDiv.textContent = "登録に失敗しました: サーバーエラー";
       }
-      alert("登録完了！　一覧を更新します。");
-      e.target.reset();
-      loadCompanies();
     });
+
     async function loadCompanies() {
-      const res = await fetch("/api/companies");
       const ul = document.getElementById("company-list");
-      if (!res.ok) {
-        ul.innerHTML = `<li style="color:red;">一覧取得失敗 (${res.status})</li>`;
-        return;
+      try {
+        const res = await fetch("/api/companies/");
+        if (!res.ok) {
+          ul.innerHTML = `<li style="color:red;">一覧取得失敗 (${res.status})</li>`;
+          return;
+        }
+        const list = await res.json();
+        if (list.length === 0) {
+          ul.innerHTML = "<li>まだ登録された自治体はありません。</li>";
+          return;
+        }
+        ul.innerHTML = list
+          .map(c => `<li>${c.name} （${c.email}）</li>`)
+          .join("");
+      } catch (error) {
+        console.error('Load companies error:', error);
+        ul.innerHTML = "<li style='color:red;'>自治体一覧の取得に失敗しました</li>";
       }
-      const list = await res.json();
-      if (list.length === 0) {
-        ul.innerHTML = "<li>まだ登録された企業はありません。</li>";
-        return;
-      }
-      ul.innerHTML = list
-        .map(c => `<li>${c.name} （${c.email}）</li>`)
-        .join("");
     }
     document.addEventListener("DOMContentLoaded", loadCompanies);
   </script>
