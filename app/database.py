@@ -1,34 +1,40 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # データベースURL
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./dev.db").replace("postgres://", "postgresql+asyncpg://")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://")
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
 print(f"→ Using DATABASE_URL = {DATABASE_URL!r}")
 
 # SQLiteの場合の設定
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
-# 非同期エンジン
-engine = create_async_engine(
+# 同期エンジン
+engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
     pool_pre_ping=True,
     echo=True  # デバッグ用
 )
 
-# 非同期セッション
-AsyncSessionLocal = sessionmaker(
+# 同期セッション
+SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine,
-    class_=AsyncSession
+    bind=engine
 )
 
 Base = declarative_base()
 
-# 非同期依存性
-async def get_db():
-    async with AsyncSessionLocal() as db:
+# 同期依存性
+def get_db():
+    db = SessionLocal()
+    try:
         yield db
+    finally:
+        db.close()
