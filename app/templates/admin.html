@@ -306,124 +306,143 @@
     }
 
     // 避難所リストの取得と表示
-    async function fetchShelters() {
-      try {
+async function fetchShelters() {
+    try {
         const res = await fetch(`${apiUrl}/shelters`, {
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
+            headers: {
+                'Authorization': `Bearer ${authToken}`
+            }
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.detail || `HTTP ${res.status}`);
+        }
         const shelters = await res.json();
         const list = document.getElementById('admin-shelter-list');
         list.innerHTML = '';
         shelters.forEach(shelter => {
-          const div = document.createElement('div');
-          div.className = 'border p-2 mb-2';
-          div.innerHTML = `
-            <input type="checkbox" class="shelter-checkbox" data-id="${shelter.id}">
-            <strong>${shelter.name}</strong> - ${shelter.address}
-            (定員: ${shelter.capacity}, 利用: ${shelter.current_occupancy}, 状態: ${shelter.status})
-            <br>
-            <small>
-              緯度: ${shelter.latitude}, 経度: ${shelter.longitude}
-              ${shelter.contact ? `, 連絡先: ${shelter.contact}` : ''}
-              ${shelter.operator ? `, 運営: ${shelter.operator}` : ''}
-            </small>
-          `;
-          list.appendChild(div);
-          // マップにピンを追加
-          if (shelter.latitude && shelter.longitude) {
-            if (adminMarkers[shelter.id]) {
-              adminMarkers[shelter.id].setLatLng([shelter.latitude, shelter.longitude]);
-            } else {
-              adminMarkers[shelter.id] = L.marker([shelter.latitude, shelter.longitude])
-                .addTo(adminMap)
-                .bindPopup(`<b>${shelter.name}</b><br>${shelter.address}`);
+            const div = document.createElement('div');
+            div.className = 'border p-2 mb-2';
+            div.innerHTML = `
+                <input type="checkbox" class="shelter-checkbox" data-id="${shelter.id}">
+                <strong>${shelter.name}</strong> - ${shelter.address}
+                (定員: ${shelter.capacity}, 利用: ${shelter.current_occupancy}, 状態: ${shelter.status})
+                <br>
+                <small>
+                    緯度: ${shelter.latitude}, 経度: ${shelter.longitude}
+                    ${shelter.contact ? `, 連絡先: ${shelter.contact}` : ''}
+                    ${shelter.operator ? `, 運営: ${shelter.operator}` : ''}
+                </small>
+            `;
+            list.appendChild(div);
+            if (shelter.latitude && shelter.longitude) {
+                if (adminMarkers[shelter.id]) {
+                    adminMarkers[shelter.id].setLatLng([shelter.latitude, shelter.longitude]);
+                } else {
+                    adminMarkers[shelter.id] = L.marker([shelter.latitude, shelter.longitude])
+                        .addTo(adminMap)
+                        .bindPopup(`<b>${shelter.name}</b><br>${shelter.address}`);
+                }
             }
-          }
         });
-      } catch (error) {
+    } catch (error) {
         console.error('避難所取得エラー:', error);
-        alert('避難所データの取得に失敗しました');
-      }
+        alert(`避難所データの取得に失敗しました: ${error.message}`);
     }
+}
 
     // 避難所追加フォームの処理
-    document.getElementById('add-shelter-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      if (!authToken) {
+document.getElementById('add-shelter-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!authToken) {
         alert('ログインしてください');
         window.location.href = '/login';
         return;
-      }
-      const fd = new FormData(e.target);
-      const payload = {
+    }
+    const fd = new FormData(e.target);
+    const address = fd.get('address').trim();
+    let latitude = parseFloat(fd.get('latitude'));
+    let longitude = parseFloat(fd.get('longitude'));
+
+    // ジオコーディングで緯度経度を取得（未設定の場合）
+    if (!latitude || !longitude) {
+        try {
+            const geoData = await geocode(address);
+            latitude = geoData.lat;
+            longitude = geoData.lon;
+        } catch (error) {
+            alert(`住所から座標を取得できませんでした: ${error.message}`);
+            return;
+        }
+    }
+
+    const payload = {
         name: fd.get('name').trim(),
-        address: fd.get('address').trim(),
-        latitude: parseFloat(fd.get('latitude')) || 0,
-        longitude: parseFloat(fd.get('longitude')) || 0,
+        address: address,
+        latitude: latitude,
+        longitude: longitude,
         capacity: Number(fd.get('capacity')) || 0,
         current_occupancy: Number(fd.get('current_occupancy')) || 0,
         attributes: {
-          pets_allowed: fd.get('pets_allowed') === 'on',
-          barrier_free: fd.get('barrier_free') === 'on',
-          toilet_available: fd.get('toilet_available') === 'on',
-          food_available: fd.get('food_available') === 'on',
-          medical_available: fd.get('medical_available') === 'on',
-          wifi_available: fd.get('wifi_available') === 'on',
-          charging_available: fd.get('charging_available') === 'on'
+            pets_allowed: fd.get('pets_allowed') === 'on',
+            barrier_free: fd.get('barrier_free') === 'on',
+            toilet_available: fd.get('toilet_available') === 'on',
+            food_available: fd.get('food_available') === 'on',
+            medical_available: fd.get('medical_available') === 'on',
+            wifi_available: fd.get('wifi_available') === 'on',
+            charging_available: fd.get('charging_available') === 'on',
+            equipment: fd.get('equipment')?.trim() || null  // equipment フィールドを追加
         },
         photos: [],
-        contact: fd.get('contact').trim() || '',
+        contact: fd.get('contact').trim() || null,
         operator: fd.get('operator').trim() || '自治体',
         opened_at: fd.get('opened_at') ? new Date(fd.get('opened_at')).toISOString() : new Date().toISOString(),
         status: fd.get('status') || 'open'
-      };
-      console.log('Shelter payload:', payload);
-      try {
+    };
+    console.log('Shelter payload:', payload);
+    try {
         const res = await fetch(`${apiUrl}/shelters`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
         });
         if (!res.ok) {
-          const error = await res.json();
-          console.error('Shelter creation error:', error);
-          throw new Error(error.detail || `避難所作成に失敗しました (${res.status})`);
+            const error = await res.json();
+            console.error('Shelter creation error:', error);
+            throw new Error(error.detail || `避難所作成に失敗しました (${res.status})`);
         }
         const shelter = await res.json();
         const fileInput = e.target.querySelector('input[name="photos"]');
         const files = fileInput.files;
         if (files.length > 0) {
-          const pfd = new FormData();
-          pfd.append('shelter_id', shelter.id);
-          for (const file of files) {
-            pfd.append('files', file);
-          }
-          const upRes = await fetch(`${apiUrl}/shelters/upload-photos`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`
-            },
-            body: pfd
-          });
-          if (!upRes.ok) {
-            console.error('Photo upload error:', await upRes.text());
-            alert('写真アップロードに失敗しました');
-          }
+            const pfd = new FormData();
+            pfd.append('shelter_id', shelter.id);
+            for (const file of files) {
+                pfd.append('files', file);
+            }
+            const upRes = await fetch(`${apiUrl}/shelters/upload-photos`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: pfd
+            });
+            if (!upRes.ok) {
+                console.error('Photo upload error:', await upRes.text());
+                alert('写真アップロードに失敗しました');
+            }
         }
         e.target.reset();
         fetchShelters();
         alert('避難所が作成されました');
-      } catch (error) {
+    } catch (error) {
         console.error('Create shelter error:', error);
         alert(`避難所作成に失敗しました: ${error.message}`);
-      }
-    });
+    }
+});
 
     // 一括更新
     async function bulkUpdate() {
@@ -488,25 +507,35 @@
     }
 
     // 初期化
-    document.addEventListener('DOMContentLoaded', () => {
-      if (!authToken) {
+document.addEventListener('DOMContentLoaded', () => {
+    if (!authToken) {
         alert('ログインしてください');
         window.location.href = '/login';
         return;
-      }
-      console.log('Admin token:', authToken);
-      initAdminMap();
-      fetchShelters();
-      // WebSocket 接続
-      const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(authToken)}`);
-      ws.onopen = () => console.log('WebSocket connected');
-      ws.onmessage = () => {
-        console.log('WebSocket message received');
-        fetchShelters();
-      };
-      ws.onerror = (error) => console.error('WebSocket error:', error);
-      ws.onclose = () => console.log('WebSocket closed');
-    });
+    }
+    console.log('Admin token:', authToken);
+    initAdminMap();
+    fetchShelters();
+
+    function connectWebSocket() {
+        const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(authToken)}`);
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+        ws.onmessage = (event) => {
+            console.log('WebSocket message received:', event.data);
+            fetchShelters();
+        };
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+        ws.onclose = () => {
+            console.log('WebSocket closed');
+            setTimeout(connectWebSocket, 5000); // 5秒後に再接続
+        };
+    }
+    connectWebSocket();
+});
   </script>
 </body>
 </html>
