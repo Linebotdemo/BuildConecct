@@ -26,11 +26,11 @@ connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite")
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
-    pool_size=10,  # 接続プールサイズ
-    max_overflow=20,  # 超過時の追加接続数
-    pool_timeout=30,  # 接続待機時間
-    pool_pre_ping=True,  # 接続の健全性チェック
-    echo=False,  # SQLログ（本番ではFalse）
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_pre_ping=True,
+    echo=False,  # 本番ではFalse
 )
 
 # 同期セッション

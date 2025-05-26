@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Float, DateTime, ForeignKey, JSON, Index, LargeBinary
+    Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Index, LargeBinary
 )
 from sqlalchemy.orm import relationship
 from database import Base
@@ -14,8 +14,15 @@ class Shelter(Base):
     longitude = Column(Float, nullable=False)
     capacity = Column(Integer, nullable=False)
     current_occupancy = Column(Integer, default=0, nullable=False)
-    attributes = Column(JSON, default={}, nullable=False)  # JSON型で属性を保存
-    photos = Column(String, default="")  # カンマ区切りの文字列
+    pets_allowed = Column(Boolean, default=False, nullable=False)
+    barrier_free = Column(Boolean, default=False, nullable=False)
+    toilet_available = Column(Boolean, default=False, nullable=False)
+    food_available = Column(Boolean, default=False, nullable=False)
+    medical_available = Column(Boolean, default=False, nullable=False)
+    wifi_available = Column(Boolean, default=False, nullable=False)
+    charging_available = Column(Boolean, default=False, nullable=False)
+    equipment = Column(String, nullable=True)
+    photos = Column(String, default="")
     contact = Column(String, nullable=True)
     operator = Column(String, nullable=False)
     opened_at = Column(DateTime, nullable=False)
@@ -34,7 +41,7 @@ class Photo(Base):
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, nullable=False)
     content_type = Column(String, nullable=False)
-    data = Column(LargeBinary, nullable=True)  # LargeBinaryを正しくインポート
+    data = Column(LargeBinary, nullable=True)
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

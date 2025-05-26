@@ -1,18 +1,6 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Dict
+from typing import List, Optional
 from datetime import datetime
-
-class ShelterAttributes(BaseModel):
-    pets_allowed: bool = False
-    barrier_free: bool = False
-    toilet_available: bool = False
-    food_available: bool = False
-    medical_available: bool = False
-    wifi_available: bool = False
-    charging_available: bool = False
-
-    class Config:
-        from_attributes = True
 
 class Shelter(BaseModel):
     id: Optional[int] = None
@@ -22,7 +10,14 @@ class Shelter(BaseModel):
     longitude: float
     capacity: int = Field(..., ge=0)
     current_occupancy: int = Field(..., ge=0)
-    attributes: Dict  # JSON互換の辞書（ShelterAttributesの内容）
+    pets_allowed: bool = False
+    barrier_free: bool = False
+    toilet_available: bool = False
+    food_available: bool = False
+    medical_available: bool = False
+    wifi_available: bool = False
+    charging_available: bool = False
+    equipment: Optional[str] = None
     photos: List[str] = []
     contact: Optional[str] = None
     operator: str = Field(..., min_length=1, max_length=255)
@@ -41,7 +36,14 @@ class ShelterUpdate(BaseModel):
     longitude: Optional[float] = None
     capacity: Optional[int] = Field(None, ge=0)
     current_occupancy: Optional[int] = Field(None, ge=0)
-    attributes: Optional[Dict] = None
+    pets_allowed: Optional[bool] = None
+    barrier_free: Optional[bool] = None
+    toilet_available: Optional[bool] = None
+    food_available: Optional[bool] = None
+    medical_available: Optional[bool] = None
+    wifi_available: Optional[bool] = None
+    charging_available: Optional[bool] = None
+    equipment: Optional[str] = None
     photos: Optional[List[str]] = None
     contact: Optional[str] = None
     operator: Optional[str] = Field(None, min_length=1, max_length=255)
