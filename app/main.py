@@ -665,9 +665,13 @@ async def upload_photo(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="アップロード権限がありません")
         os.makedirs(os.path.join(DATA_DIR, "photos"), exist_ok=True)
         file_ext = file.filename.split(".")[-1].lower()
-        if file_ext not in ["jpg", "jpeg", "png", "gif"]:
-            logger.error("Invalid file extension: %s", file_ext)
-            raise HTTPException(status_code=400, detail="許可されていないファイル形式です")
+        allowed_extensions = ["jpg", "jpeg", "png", "gif", "webp"]  # WebPを追加
+        if file_ext not in allowed_extensions:
+            logger.error("Invalid file extension: %s for file %s", file_ext, file.filename)
+            raise HTTPException(
+                status_code=400,
+                detail=f"許可されていないファイル形式です: {file.filename} (許可: {', '.join(allowed_extensions)})"
+            )
         filename = f"{uuid.uuid4()}.{file_ext}"
         file_path = os.path.join(DATA_DIR, "photos", filename)
         with open(file_path, "wb") as f:
@@ -680,6 +684,8 @@ async def upload_photo(
         log_action(db, "upload_photo", shelter_id, current_user.email)
         logger.info("Photo uploaded: url=%s", photo_url)
         return {"photo_url": photo_url}
+    except HTTPException:
+        raise  # HTTPExceptionはそのまま再送
     except Exception as e:
         logger.error("Error in upload_photo: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
@@ -704,10 +710,13 @@ async def upload_photos(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="アップロード権限がありません")
         os.makedirs(os.path.join(DATA_DIR, "photos"), exist_ok=True)
         photo_urls = []
+        allowed_extensions = ["jpg", "jpeg", "png", "gif", "webp"]  # WebPを追加
+        invalid_files = []
         for file in files:
             file_ext = file.filename.split(".")[-1].lower()
-            if file_ext not in ["jpg", "jpeg", "png", "gif"]:
-                logger.error("Invalid file extension: %s", file_ext)
+            if file_ext not in allowed_extensions:
+                logger.error("Invalid file extension: %s for file %s", file_ext, file.filename)
+                invalid_files.append(file.filename)
                 continue
             filename = f"{uuid.uuid4()}.{file_ext}"
             file_path = os.path.join(DATA_DIR, "photos", filename)
@@ -715,15 +724,21 @@ async def upload_photos(
                 f.write(await file.read())
             photo_url = f"/data/photos/{filename}"
             photo_urls.append(photo_url)
+        if invalid_files:
+            logger.warning("Invalid files skipped: %s", ", ".join(invalid_files))
         if not photo_urls:
-            logger.error("No valid photos uploaded")
-            raise HTTPException(status_code=400, detail="有効な写真がありません")
+            raise HTTPException(
+                status_code=400,
+                detail=f"有効な写真がありません。無効なファイル: {', '.join(invalid_files)} (許可: {', '.join(allowed_extensions)})"
+            )
         existing_photos = db_shelter.photos.split(",") if db_shelter.photos else []
         db_shelter.photos = ",".join([p for p in existing_photos + photo_urls if p])
         db.commit()
         log_action(db, "upload_photos", shelter_id, current_user.email)
         logger.info("Photos uploaded: urls=%s", photo_urls)
         return {"photo_urls": photo_urls}
+    except HTTPException:
+        raise  # HTTPExceptionはそのまま再送
     except Exception as e:
         logger.error("Error in upload_photos: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
