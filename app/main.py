@@ -7,8 +7,6 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 from sqlalchemy.sql import func
-from fastapi import FastAPI, Depends
-from typing import List, Optional, Dict
 from fastapi import (
     FastAPI,
     Depends,
@@ -29,9 +27,11 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+from sqlalchemy import Boolean
 from pydantic import ValidationError
 import httpx
 import xml.etree.ElementTree as ET
+from typing import List, Optional, Dict
 
 # ロギング設定
 logging.basicConfig(
@@ -97,18 +97,18 @@ try:
     logger.info("Template directory: %s", os.path.abspath(TEMPLATE_DIR))
     template_files = os.listdir(TEMPLATE_DIR)
     logger.info("Available templates: %s", template_files)
-    if "index.html" not in template_files:
-        logger.warning("index.html not found in template directory")
-    if "login.html" not in template_files:
-        logger.warning("login.html not found in template directory")
+    for template in ["index.html", "login.html", "company-dashboard.html", "admin.html", "register.html", "register_auth.html"]:
+        if template not in template_files:
+            logger.warning(f"{template} not found in template directory")
 except Exception as e:
     logger.error("Error accessing template directory: %s", str(e))
 
-# 静的ファイル・テンプレート設定
+# 静的ファイル・データディレクトリ設定
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 DATA_DIR = os.path.join(BASE_DIR, "data")
+PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
 os.makedirs(STATIC_DIR, exist_ok=True)
-os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(PHOTOS_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/data", StaticFiles(directory=DATA_DIR), name="data")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
@@ -117,7 +117,7 @@ connected_clients: Dict[str, WebSocket] = {}
 # CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://safeshelter.onrender.com"],
+    allow_origins=["https://safeshelter.onrender.com", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,7 +130,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/company-token")
 
 # HTTP クライアント
-client = httpx.Client(timeout=10.0)
+client = httpx.AsyncClient(timeout=10.0)
 
 # スタートアップイベント
 @app.on_event("startup")
@@ -139,8 +139,8 @@ async def on_startup():
     try:
         Base.metadata.create_all(bind=engine)  # テーブル作成
         with SessionLocal() as db:
+            # 管理者アカウントの初期化
             admin = db.query(CompanyModel).filter(CompanyModel.email == "admin@example.com").first()
-            logger.info("Admin check: %s", admin)
             if not admin:
                 hashed_pw = pwd_context.hash("admin123")
                 admin = CompanyModel(
@@ -155,9 +155,45 @@ async def on_startup():
                 logger.info("Admin account created successfully")
             else:
                 logger.info("Admin account exists: email=%s, role=%s", admin.email, admin.role)
+
+            # サンプル避難所の挿入（デバッグ用）
+            if not db.query(ShelterModel).first():
+                sample_shelter = ShelterModel(
+                    name="テスト避難所",
+                    address="東京都新宿区1-1-1",
+                    latitude=35.69388716,
+                    longitude=139.70341014,
+                    capacity=100,
+                    current_occupancy=10,
+                    status="open",
+                    photos="",
+                    attributes={
+                        "pets_allowed": True,
+                        "barrier_free": True,
+                        "toilet_available": True,
+                        "food_available": False,
+                        "medical_available": False,
+                        "wifi_available": True,
+                        "charging_available": False,
+                    },
+                    contact="03-1234-5678",
+                    operator="テスト運営",
+                    company_id=admin.id,
+                    opened_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow(),
+                )
+                db.add(sample_shelter)
+                db.commit()
+                logger.info("Sample shelter inserted")
     except Exception as e:
-        logger.error("Error creating admin account: %s\n%s", str(e), traceback.format_exc())
+        logger.error("Error during startup: %s\n%s", str(e), traceback.format_exc())
         raise
+
+# シャットダウンイベント
+@app.on_event("shutdown")
+async def on_shutdown():
+    await client.aclose()
+    logger.info("HTTP client closed")
 
 # 企業登録／一覧 用 API をマウント
 app.include_router(company_router)
@@ -382,10 +418,15 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
         {"request": request, "companies": []},
     )
 
-# 避難所一覧取得
+# 避難所一覧取得（公開エンドポイント）
 @app.get("/api/shelters", response_model=List[ShelterSchema])
 async def get_shelters(
-    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None, pattern="^(open|closed)?$"),
+    distance: Optional[float] = Query(None, ge=0),
+    latitude: Optional[float] = Query(None),
+    longitude: Optional[float] = Query(None),
     pets_allowed: Optional[bool] = Query(None),
     barrier_free: Optional[bool] = Query(None),
     toilet_available: Optional[bool] = Query(None),
@@ -393,82 +434,108 @@ async def get_shelters(
     medical_available: Optional[bool] = Query(None),
     wifi_available: Optional[bool] = Query(None),
     charging_available: Optional[bool] = Query(None),
-    status: Optional[str] = Query(None, pattern="^(open|closed)?$"),
-    distance: Optional[float] = Query(None, ge=0),
-    latitude: Optional[float] = Query(None),  # ユーザーの現在地
-    longitude: Optional[float] = Query(None),  # ユーザーの現在地
-    db: Session = Depends(get_db),
-    current_user: CompanyModel = Depends(get_current_user),
 ):
     try:
-        logger.info("Fetching shelters, search=%s, user=%s", search, current_user.email)
+        logger.info("Fetching shelters: search=%s, status=%s, distance=%s", search, status, distance)
         query = db.query(ShelterModel)
-        if current_user.role != "admin":
-            query = query.filter(ShelterModel.company_id == current_user.id)
+
+        # 検索フィルタ
         if search:
-            query = query.filter(ShelterModel.name.ilike(f"%{search}%") | ShelterModel.address.ilike(f"%{search}%"))
+            search = f"%{search}%"
+            query = query.filter(
+                (ShelterModel.name.ilike(search)) |
+                (ShelterModel.address.ilike(search))
+            )
+
+        # 状態フィルタ
         if status:
             query = query.filter(ShelterModel.status == status)
+
+        # 属性フィルタ（attributes JSON カラムを使用）
         if pets_allowed is not None:
-            query = query.filter(ShelterModel.pets_allowed == pets_allowed)
+            query = query.filter(ShelterModel.attributes['pets_allowed'].astext.cast(Boolean) == pets_allowed)
         if barrier_free is not None:
-            query = query.filter(ShelterModel.barrier_free == barrier_free)
+            query = query.filter(ShelterModel.attributes['barrier_free'].astext.cast(Boolean) == barrier_free)
         if toilet_available is not None:
-            query = query.filter(ShelterModel.toilet_available == toilet_available)
+            query = query.filter(ShelterModel.attributes['toilet_available'].astext.cast(Boolean) == toilet_available)
         if food_available is not None:
-            query = query.filter(ShelterModel.food_available == food_available)
+            query = query.filter(ShelterModel.attributes['food_available'].astext.cast(Boolean) == food_available)
         if medical_available is not None:
-            query = query.filter(ShelterModel.medical_available == medical_available)
+            query = query.filter(ShelterModel.attributes['medical_available'].astext.cast(Boolean) == medical_available)
         if wifi_available is not None:
-            query = query.filter(ShelterModel.wifi_available == wifi_available)
+            query = query.filter(ShelterModel.attributes['wifi_available'].astext.cast(Boolean) == wifi_available)
         if charging_available is not None:
-            query = query.filter(ShelterModel.charging_available == charging_available)
+            query = query.filter(ShelterModel.attributes['charging_available'].astext.cast(Boolean) == charging_available)
+
+        shelters = query.all()
+
+        # 距離フィルタ（サーバーサイドでの計算）
         if distance and latitude is not None and longitude is not None:
-            # ハバーサイン公式で距離を計算（SQL）
-            query = query.filter(
-                6371 * func.acos(
-                    func.cos(func.radians(latitude)) * func.cos(func.radians(ShelterModel.latitude)) *
-                    func.cos(func.radians(ShelterModel.longitude) - func.radians(longitude)) +
-                    func.sin(func.radians(latitude)) * func.sin(func.radians(ShelterModel.latitude))
-                ) <= distance
-            )
-        shelters_orm = query.all()
-        shelters = []
-        for s in shelters_orm:
+            from math import radians, sin, cos, sqrt, atan2
+            def haversine(lat1, lon1, lat2, lon2):
+                R = 6371  # 地球の半径（km）
+                dlat = radians(lat2 - lat1)
+                dlon = radians(lon2 - lon1)
+                a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+                c = 2 * atan2(sqrt(a), sqrt(1-a))
+                return R * c
+
+            filtered_shelters = []
+            for shelter in shelters:
+                if shelter.latitude and shelter.longitude:
+                    dist = haversine(latitude, longitude, shelter.latitude, shelter.longitude)
+                    if dist <= distance:
+                        filtered_shelters.append(shelter)
+            shelters = filtered_shelters
+
+        # レスポンスの正規化
+        result = []
+        for shelter in shelters:
+            photos = shelter.photos.split(",") if shelter.photos and isinstance(shelter.photos, str) else []
+            # 写真パスの検証
+            normalized_photos = []
+            for photo in photos:
+                if photo and os.path.exists(os.path.join(BASE_DIR, "data", photo.lstrip("/"))):
+                    normalized_photos.append(photo)
+                else:
+                    normalized_photos.append("/static/placeholder.jpg")
+                    logger.warning("Photo not found, using placeholder: %s", photo)
+
             shelter_data = {
-                "id": s.id,
-                "name": s.name,
-                "address": s.address,
-                "latitude": s.latitude,
-                "longitude": s.longitude,
-                "capacity": s.capacity,
-                "current_occupancy": s.current_occupancy,
-                "attributes": {
-                    "pets_allowed": s.pets_allowed,
-                    "barrier_free": s.barrier_free,
-                    "toilet_available": s.toilet_available,
-                    "food_available": s.food_available,
-                    "medical_available": s.medical_available,
-                    "wifi_available": s.wifi_available,
-                    "charging_available": s.charging_available,
-                    "equipment": s.equipment,
+                "id": shelter.id,
+                "name": shelter.name,
+                "address": shelter.address,
+                "latitude": shelter.latitude,
+                "longitude": shelter.longitude,
+                "capacity": shelter.capacity,
+                "current_occupancy": shelter.current_occupancy,
+                "attributes": shelter.attributes or {
+                    "pets_allowed": shelter.pets_allowed if hasattr(shelter, "pets_allowed") else False,
+                    "barrier_free": shelter.barrier_free if hasattr(shelter, "barrier_free") else False,
+                    "toilet_available": shelter.toilet_available if hasattr(shelter, "toilet_available") else False,
+                    "food_available": shelter.food_available if hasattr(shelter, "food_available") else False,
+                    "medical_available": shelter.medical_available if hasattr(shelter, "medical_available") else False,
+                    "wifi_available": shelter.wifi_available if hasattr(shelter, "wifi_available") else False,
+                    "charging_available": shelter.charging_available if hasattr(shelter, "charging_available") else False,
+                    "equipment": shelter.equipment if hasattr(shelter, "equipment") else "",
                 },
-                "photos": s.photos.split(",") if s.photos else [],
-                "contact": s.contact,
-                "operator": s.operator,
-                "opened_at": s.opened_at,
-                "status": s.status,
-                "updated_at": s.updated_at,
-                "company_id": s.company_id,
+                "photos": normalized_photos,
+                "contact": shelter.contact,
+                "operator": shelter.operator,
+                "opened_at": shelter.opened_at,
+                "status": shelter.status,
+                "updated_at": shelter.updated_at,
+                "company_id": shelter.company_id,
             }
-            shelters.append(shelter_data)
-        logger.info("Returning %d shelters", len(shelters))
-        return shelters
+            result.append(shelter_data)
+
+        logger.info("Returning %d shelters", len(result))
+        return result
     except Exception as e:
         logger.error("Error in get_shelters: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Failed to fetch shelters: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"避難所取得に失敗しました: {str(e)}")
 
-# 避難所作成
+# 避難所作成（認証必要）
 @app.post("/api/shelters", response_model=ShelterSchema)
 async def create_shelter(
     shelter: ShelterSchema,
@@ -484,14 +551,16 @@ async def create_shelter(
             longitude=shelter.longitude,
             capacity=shelter.capacity,
             current_occupancy=shelter.current_occupancy,
-            pets_allowed=shelter.pets_allowed,
-            barrier_free=shelter.barrier_free,
-            toilet_available=shelter.toilet_available,
-            food_available=shelter.food_available,
-            medical_available=shelter.medical_available,
-            wifi_available=shelter.wifi_available,
-            charging_available=shelter.charging_available,
-            equipment=shelter.equipment,
+            attributes={
+                "pets_allowed": shelter.pets_allowed,
+                "barrier_free": shelter.barrier_free,
+                "toilet_available": shelter.toilet_available,
+                "food_available": shelter.food_available,
+                "medical_available": shelter.medical_available,
+                "wifi_available": shelter.wifi_available,
+                "charging_available": shelter.charging_available,
+                "equipment": shelter.equipment,
+            },
             photos=",".join(shelter.photos) if shelter.photos else "",
             contact=shelter.contact,
             operator=shelter.operator,
@@ -514,14 +583,7 @@ async def create_shelter(
             "longitude": db_shelter.longitude,
             "capacity": db_shelter.capacity,
             "current_occupancy": db_shelter.current_occupancy,
-            "pets_allowed": db_shelter.pets_allowed,
-            "barrier_free": db_shelter.barrier_free,
-            "toilet_available": db_shelter.toilet_available,
-            "food_available": db_shelter.food_available,
-            "medical_available": db_shelter.medical_available,
-            "wifi_available": db_shelter.wifi_available,
-            "charging_available": db_shelter.charging_available,
-            "equipment": db_shelter.equipment,
+            "attributes": db_shelter.attributes,
             "photos": db_shelter.photos.split(",") if db_shelter.photos else [],
             "contact": db_shelter.contact,
             "operator": db_shelter.operator,
@@ -538,7 +600,7 @@ async def create_shelter(
         db.rollback()
         raise HTTPException(status_code=400, detail=f"避難所登録に失敗しました: {str(e)}")
 
-# 避難所更新
+# 避難所更新（認証必要）
 @app.put("/api/shelters/{shelter_id}", response_model=ShelterSchema)
 async def update_shelter(
     shelter_id: int,
@@ -556,8 +618,16 @@ async def update_shelter(
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="更新権限がありません")
         data = shelter.dict(exclude_unset=True)
+        attributes = db_shelter.attributes or {}
         for k, v in data.items():
-            setattr(db_shelter, k, v)
+            if k in ["pets_allowed", "barrier_free", "toilet_available", "food_available", 
+                     "medical_available", "wifi_available", "charging_available", "equipment"]:
+                attributes[k] = v
+            elif k == "photos" and v:
+                setattr(db_shelter, k, ",".join(v))
+            elif k != "attributes":
+                setattr(db_shelter, k, v)
+        db_shelter.attributes = attributes
         db_shelter.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(db_shelter)
@@ -572,14 +642,7 @@ async def update_shelter(
             "longitude": db_shelter.longitude,
             "capacity": db_shelter.capacity,
             "current_occupancy": db_shelter.current_occupancy,
-            "pets_allowed": db_shelter.pets_allowed,
-            "barrier_free": db_shelter.barrier_free,
-            "toilet_available": db_shelter.toilet_available,
-            "food_available": db_shelter.food_available,
-            "medical_available": db_shelter.medical_available,
-            "wifi_available": db_shelter.wifi_available,
-            "charging_available": db_shelter.charging_available,
-            "equipment": db_shelter.equipment,
+            "attributes": db_shelter.attributes,
             "photos": db_shelter.photos.split(",") if db_shelter.photos else [],
             "contact": db_shelter.contact,
             "operator": db_shelter.operator,
@@ -593,7 +656,7 @@ async def update_shelter(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"避難所更新に失敗しました: {str(e)}")
 
-# 避難所削除
+# 避難所削除（認証必要）
 @app.delete("/api/shelters/{shelter_id}")
 async def delete_shelter(
     shelter_id: int,
@@ -608,10 +671,10 @@ async def delete_shelter(
             raise HTTPException(status_code=404, detail="避難所が見つかりません")
         if db_shelter.company_id != current_user.id and current_user.role != "admin":
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="削除権限がありません")
-        log_action(db, "delete_shelter", shelter_id, current_user.email)
+            raise HTTPException(status_code=status.HTTP_403_FORB)
         db.delete(db_shelter)
         db.commit()
+        log_action(db, "delete_shelter", shelter_id, current_user.email)
         await broadcast_shelter_update({"action": "delete", "shelter_id": shelter_id})
         logger.info("Shelter deleted: id=%s", shelter_id)
         return {"message": "避難所を削除しました"}
@@ -620,7 +683,7 @@ async def delete_shelter(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"避難所削除に失敗しました: {str(e)}")
 
-# 一括更新
+# 一括更新（認証必要）
 @app.post("/api/shelters/bulk-update")
 async def bulk_update_shelters(
     request: BulkUpdateRequest,
@@ -647,12 +710,12 @@ async def bulk_update_shelters(
         await broadcast_shelter_update({"action": "bulk_update", "shelter_ids": request.shelter_ids})
         logger.info("Bulk update completed: %d shelters", len(shelters))
         return {"message": "避難所を一括更新しました"}
-    except Exception as e:
+    except Exceptionestral as e:
         logger.error("Error in bulk_update_shelters: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括更新に失敗しました: {str(e)}")
 
-# 一括削除
+# 一括削除（認証必要）
 @app.post("/api/shelters/bulk-delete")
 async def bulk_delete_shelters(
     shelter_ids: List[int],
@@ -680,85 +743,7 @@ async def bulk_delete_shelters(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
-@app.get("/api/shelters")
-async def get_shelters(
-    db: Session = Depends(get_db),
-    search: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    distance: Optional[float] = Query(None),
-    latitude: Optional[float] = Query(None),
-    longitude: Optional[float] = Query(None),
-    pets_allowed: Optional[bool] = Query(None),
-    barrier_free: Optional[bool] = Query(None),
-    toilet_available: Optional[bool] = Query(None),
-    food_available: Optional[bool] = Query(None),
-    medical_available: Optional[bool] = Query(None),
-    wifi_available: Optional[bool] = Query(None),
-    charging_available: Optional[bool] = Query(None)
-):
-    query = db.query(ShelterModel)
-    
-    # 検索フィルタ
-    if search:
-        search = f"%{search}%"
-        query = query.filter(
-            (ShelterModel.name.ilike(search)) |
-            (ShelterModel.address.ilike(search))
-        )
-    
-    # 状態フィルタ
-    if status:
-        query = query.filter(ShelterModel.status == status)
-    
-    # 属性フィルタ
-    if pets_allowed:
-        query = query.filter(ShelterModel.attributes['pets_allowed'].astext.cast(Boolean) == True)
-    if barrier_free:
-        query = query.filter(ShelterModel.attributes['barrier_free'].astext.cast(Boolean) == True)
-    if toilet_available:
-        query = query.filter(ShelterModel.attributes['toilet_available'].astext.cast(Boolean) == True)
-    if food_available:
-        query = query.filter(ShelterModel.attributes['food_available'].astext.cast(Boolean) == True)
-    if medical_available:
-        query = query.filter(ShelterModel.attributes['medical_available'].astext.cast(Boolean) == True)
-    if wifi_available:
-        query = query.filter(ShelterModel.attributes['wifi_available'].astext.cast(Boolean) == True)
-    if charging_available:
-        query = query.filter(ShelterModel.attributes['charging_available'].astext.cast(Boolean) == True)
-
-    shelters = query.all()
-
-    # 距離フィルタ（サーバーサイドでの計算）
-    if distance and latitude and longitude:
-        from math import radians, sin, cos, sqrt, atan2
-        def haversine(lat1, lon1, lat2, lon2):
-            R = 6371  # 地球の半径（km）
-            dlat = radians(lat2 - lat1)
-            dlon = radians(lon2 - lon1)
-            a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-            c = 2 * atan2(sqrt(a), sqrt(1-a))
-            return R * c
-
-        filtered_shelters = []
-        for shelter in shelters:
-            if shelter.latitude and shelter.longitude:
-                dist = haversine(latitude, longitude, shelter.latitude, shelter.longitude)
-                if dist <= distance:
-                    filtered_shelters.append(shelter)
-        shelters = filtered_shelters
-
-    # 写真と属性の正規化
-    for shelter in shelters:
-        if shelter.photos and not isinstance(shelter.photos, list):
-            shelter.photos = [shelter.photos] if shelter.photos else []
-            for i, photo in enumerate(shelter.photos):
-                if not os.path.exists(f"app/data/photos/{photo}"):
-                    shelter.photos[i] = "/static/placeholder.jpg"
-        shelter.attributes = shelter.attributes or {}
-
-    return shelters
-
-# 写真アップロード（単一）
+# 写真アップロード（単一、認証必要）
 @app.post("/api/shelters/upload-photo")
 async def upload_photo(
     shelter_id: int = Form(...),
@@ -775,9 +760,9 @@ async def upload_photo(
         if db_shelter.company_id != current_user.id and current_user.role != "admin":
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="アップロード権限がありません")
-        os.makedirs(os.path.join(DATA_DIR, "photos"), exist_ok=True)
+        os.makedirs(PHOTOS_DIR, exist_ok=True)
         file_ext = file.filename.split(".")[-1].lower()
-        allowed_extensions = ["jpg", "jpeg", "png", "gif", "webp"]  # WebPを追加
+        allowed_extensions = ["jpg", "jpeg", "png", "gif"]
         if file_ext not in allowed_extensions:
             logger.error("Invalid file extension: %s for file %s", file_ext, file.filename)
             raise HTTPException(
@@ -785,9 +770,10 @@ async def upload_photo(
                 detail=f"許可されていないファイル形式です: {file.filename} (許可: {', '.join(allowed_extensions)})"
             )
         filename = f"{uuid.uuid4()}.{file_ext}"
-        file_path = os.path.join(DATA_DIR, "photos", filename)
+        file_path = os.path.join(PHOTOS_DIR, filename)
         with open(file_path, "wb") as f:
-            f.write(await file.read())
+            content = await file.read()
+            f.write(content)
         photo_url = f"/data/photos/{filename}"
         photos = db_shelter.photos.split(",") if db_shelter.photos else []
         photos.append(photo_url)
@@ -797,13 +783,13 @@ async def upload_photo(
         logger.info("Photo uploaded: url=%s", photo_url)
         return {"photo_url": photo_url}
     except HTTPException:
-        raise  # HTTPExceptionはそのまま再送
+        raise
     except Exception as e:
         logger.error("Error in upload_photo: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"写真アップロードに失敗しました: {str(e)}")
 
-# 写真アップロード（複数）
+# 写真アップロード（複数、認証必要）
 @app.post("/api/shelters/upload-photos")
 async def upload_photos(
     shelter_id: int = Form(...),
@@ -820,9 +806,9 @@ async def upload_photos(
         if db_shelter.company_id != current_user.id and current_user.role != "admin":
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="アップロード権限がありません")
-        os.makedirs(os.path.join(DATA_DIR, "photos"), exist_ok=True)
+        os.makedirs(PHOTOS_DIR, exist_ok=True)
         photo_urls = []
-        allowed_extensions = ["jpg", "jpeg", "png", "gif", "webp"]  # WebPを追加
+        allowed_extensions = ["jpg", "jpeg", "png", "gif"]
         invalid_files = []
         for file in files:
             file_ext = file.filename.split(".")[-1].lower()
@@ -831,9 +817,10 @@ async def upload_photos(
                 invalid_files.append(file.filename)
                 continue
             filename = f"{uuid.uuid4()}.{file_ext}"
-            file_path = os.path.join(DATA_DIR, "photos", filename)
+            file_path = os.path.join(PHOTOS_DIR, filename)
             with open(file_path, "wb") as f:
-                f.write(await file.read())
+                content = await file.read()
+                f.write(content)
             photo_url = f"/data/photos/{filename}"
             photo_urls.append(photo_url)
         if invalid_files:
@@ -850,20 +837,20 @@ async def upload_photos(
         logger.info("Photos uploaded: urls=%s", photo_urls)
         return {"photo_urls": photo_urls}
     except HTTPException:
-        raise  # HTTPExceptionはそのまま再送
+        raise
     except Exception as e:
         logger.error("Error in upload_photos: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"写真アップロードに失敗しました: {str(e)}")
 
-# 写真取得
+# 写真取得（バイナリ）
 @app.get("/api/photos/{photo_id}")
 async def get_photo(photo_id: int, db: Session = Depends(get_db)):
     try:
-        logger.info("Fetching photo: id=%s", photo_id)
+        logger.info("Fetching photo: id=%d", photo_id)
         row = db.query(PhotoModel.data, PhotoModel.content_type).filter(PhotoModel.id == photo_id).first()
         if not row:
-            logger.error("Photo not found: id=%s", photo_id)
+            logger.error("Photo not found: id=%d", photo_id)
             raise HTTPException(status_code=404, detail="写真が見つかりません")
         data, content_type = row
         return StreamingResponse(io.BytesIO(data), media_type=content_type)
@@ -871,14 +858,14 @@ async def get_photo(photo_id: int, db: Session = Depends(get_db)):
         logger.error("Error in get_photo: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"写真取得に失敗しました: {str(e)}")
 
-# 監査ログ取得
-@app.get("/api/audit-logs", response_model=List[AuditLogSchema])
+# 監査ログ取得（認証必要）
+@app.get("/api/audit-log", response_model=List[AuditLogSchema])
 async def get_audit_logs(db: Session = Depends(get_db), current_user: CompanyModel = Depends(get_current_user)):
     try:
         logger.info("Fetching audit logs, user=%s", current_user.email)
         if current_user.role != "admin":
             logger.error("Permission denied: user=%s", current_user.email)
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ログ閲覧権限がありません")
+            raise HTTPException(status_code=403, detail="ログ閲覧権限がありません")
         logs = db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).all()
         logger.info("Fetched %d audit logs", len(logs))
         return logs
@@ -897,12 +884,11 @@ async def geocode_address_endpoint(address: str):
             "query": address,
             "output": "json",
         }
-        async with httpx.AsyncClient() as async_client:
-            resp = await async_client.get(url, params=params)
-        logger.info("Yahoo Geocode status: %s", resp.status_code)
-        logger.debug("Yahoo Geocode response: %s", json.dumps(resp.json(), ensure_ascii=False))
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, params=params)
+        logger.info("Yahoo Geocode status: %d", resp.status_code)
         if resp.status_code != 200:
-            logger.error("Yahoo API error: HTTP %s", resp.status_code)
+            logger.error("Yahoo API error: HTTP %d", resp.status_code)
             raise HTTPException(status_code=502, detail=f"Yahoo API エラー: HTTP {resp.status_code}")
         data = resp.json()
         if not data.get("Feature"):
@@ -910,38 +896,38 @@ async def geocode_address_endpoint(address: str):
             logger.error("Geocode failed: %s", msg)
             raise HTTPException(status_code=404, detail=f"ジオコーディング失敗: {msg}")
         feature = data["Feature"][0]
-        if "Geometry" in feature:
-            coordinates = feature["Geometry"].get("Coordinates")
-        elif "geometry" in feature:
-            coordinates = feature["geometry"].get("coordinates")
-        else:
-            logger.error("Coordinates not found in response")
-            raise HTTPException(status_code=500, detail="無効なジオコードレスポンス形式")
+        coordinates = feature.get("Geometry", {}).get("Coordinates") or feature.get("geometry", {}).get("coordinates")
         if not coordinates:
-            logger.error("Coordinates is empty")
-            raise HTTPException(status_code=500, detail="無効なジオコードレスポンス形式")
+            logger.error("Coordinates not found in response")
+            raise HTTPException(status_code=400, detail="無効なジオコードレスポンス形式")
         lon, lat = map(float, coordinates.split(","))
-        logger.info("Geocoded: lat=%s, lon=%s", lat, lon)
+        logger.info("Geocoded: lat=%f, lon=%f", lat, lon)
         return {"lat": lat, "lon": lon}
     except Exception as e:
-        logger.error("Error in geocode_address_endpoint: %s\n%s", str(e), traceback.format_exc())
+        logger.error("Error in geocode: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ジオコーディングに失敗しました: {str(e)}")
 
-# プロキシエンドポイント
+# プロキシエンドポイント（JMA API）
 @app.get("/proxy")
-async def proxy(url: str):
+async def proxy_endpoint(url: str):
     try:
-        logger.info("Proxy request: url=%s", url)
+        logger.info("Proxying request: url=%s", url)
+        # JMAのURL修正
         if "jma.go.jp" in url and "warning/00.json" in url:
-            url = url.replace("warning/00.json", "forecast/data/warning.json")
-        resp = await client.get(url, timeout=10.0)
-        resp.raise_for_status()
-        return JSONResponse(status_code=200, content=resp.json())
+            url = "https://www.jma.go.jp/bosai/forecast/data/warning.json"
+            logger.info("Redirected JMA URL to: %s", url)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            logger.info("Proxy response: keys=%s", list(data.keys()))
+            return JSONResponse(content=data)
     except httpx.HTTPStatusError as e:
-        logger.error("Proxy HTTP error: %s", str(e))
-        if e.response.status_code in (404, 502):
-            return JSONResponse(status_code=200, content={"areaTypes": []})
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        logger.error("Proxy HTTP error: %s, status=%d", str(e), e.response.status_code)
+        if e.response.status_code in (404, 405):
+            logger.warning("Returning empty areas for JMA error: %d", e.response.status_code)
+            return JSONResponse(content={"areaTypes": []})
+        raise HTTPException(status_code=e.response.status_code, detail=f"Proxy error: {str(e)}")
     except Exception as e:
         logger.error("Error in proxy: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"プロキシリクエストに失敗しました: {str(e)}")
@@ -957,11 +943,12 @@ def fetch_weather_alerts():
                 if datetime.fromisoformat(cache["timestamp"]) > datetime.utcnow() - timedelta(hours=1):
                     logger.info("Returning cached weather alerts")
                     return cache["alerts"]
+        # モックデータ（実際のJMA APIに置き換え可能）
         mock_data = """
         <Report>
             <Head>
                 <Title>気象警報・注意報</Title>
-                <ReportDateTime>2025-05-26T15:00:00+09:00</ReportDateTime>
+                <ReportDateTime>2025-05-30T03:00:00+09:00</ReportDateTime>
             </Head>
             <Body>
                 <Warning>
@@ -996,12 +983,12 @@ def fetch_weather_alerts():
             area = item.find("Area/Name").text
             level = "特別警報" if "特別警報" in kind else "警報" if "警報" in kind else "注意報"
             alerts.append({
-                "area": str(area),
+                "area": area,
                 "warning_type": kind,
-                "description": f"{area}における{kind}の発表",
+                "description": f"{area}における{kind}",
                 "issued_at": root.find("Head/ReportDateTime").text,
                 "level": level,
-                "bounds": get_area_bounds(area),
+                "polygon": get_area_bounds(area),
             })
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump({"timestamp": datetime.utcnow().isoformat(), "alerts": alerts}, f, ensure_ascii=False)
@@ -1025,6 +1012,7 @@ def get_area_bounds(area: str):
 async def get_disaster_alerts():
     try:
         alerts = fetch_weather_alerts()
+        logger.info("Returning %d disaster alerts", len(alerts))
         return alerts
     except Exception as e:
         logger.error("Error in get_disaster_alerts: %s\n%s", str(e), traceback.format_exc())
@@ -1041,32 +1029,40 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         shelters = []
         shelters_orm = db.query(ShelterModel).all()
-        for s in shelters_orm:
+        for shelter in shelters_orm:
+            photos = shelter.photos.split(",") if shelter.photos and isinstance(shelter.photos, str) else []
+            normalized_photos = []
+            for photo in photos:
+                if photo and os.path.exists(os.path.join(BASE_DIR, "data", photo.lstrip("/"))):
+                    normalized_photos.append(photo)
+                else:
+                    normalized_photos.append("/static/placeholder.jpg")
+                    logger.warning("Photo not found, using placeholder: %s", photo)
             shelters.append({
-                "id": s.id,
-                "name": s.name,
-                "address": s.address,
-                "capacity": s.capacity,
-                "current_occupancy": s.current_occupancy,
-                "latitude": s.latitude,
-                "longitude": s.longitude,
-                "attributes": {
-                    "pets_allowed": s.pets_allowed,
-                    "barrier_free": s.barrier_free,
-                    "toilet_available": s.toilet_available,
-                    "food_available": s.food_available,
-                    "medical_available": s.medical_available,
-                    "wifi_available": s.wifi_available,
-                    "charging_available": s.charging_available,
-                    "equipment": s.equipment,
+                "id": shelter.id,
+                "name": shelter.name,
+                "address": shelter.address,
+                "latitude": shelter.latitude,
+                "longitude": shelter.longitude,
+                "capacity": shelter.capacity,
+                "current_occupancy": shelter.current_occupancy,
+                "attributes": shelter.attributes or {
+                    "pets_allowed": shelter.pets_allowed if hasattr(shelter, "pets_allowed") else False,
+                    "barrier_free": shelter.barrier_free if hasattr(shelter, "barrier_free") else False,
+                    "toilet_available": shelter.toilet_available if hasattr(shelter, "toilet_available") else False,
+                    "food_available": shelter.food_available if hasattr(shelter, "food_available") else False,
+                    "medical_available": shelter.medical_available if hasattr(shelter, "medical_available") else False,
+                    "wifi_available": shelter.wifi_available if hasattr(shelter, "wifi_available") else False,
+                    "charging_available": shelter.charging_available if hasattr(shelter, "charging_available") else False,
+                    "equipment": shelter.equipment if hasattr(shelter, "equipment") else "",
                 },
-                "photos": s.photos.split(",") if s.photos else [],
-                "contact": s.contact,
-                "operator": s.operator,
-                "opened_at": s.opened_at,
-                "status": s.status,
-                "updated_at": s.updated_at,
-                "company_id": s.company_id,
+                "photos": normalized_photos,
+                "contact": shelter.contact,
+                "operator": shelter.operator,
+                "opened_at": shelter.opened_at,
+                "status": shelter.status,
+                "updated_at": shelter.updated_at,
+                "company_id": shelter.company_id,
             })
         alerts = fetch_weather_alerts()
         return templates.TemplateResponse(
@@ -1134,11 +1130,12 @@ async def logout_page(request: Request):
         logger.error("Error in logout_page: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ログアウトに失敗しました: {str(e)}")
 
-# 写真アップロード（バイナリ）
+# 写真アップロード（バイナリ、認証必要）
 @app.post("/api/photos/upload")
 async def upload_photo_binary(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: CompanyModel = Depends(get_current_user),
 ):
     try:
         logger.info("Uploading photo: filename=%s", file.filename)
@@ -1152,9 +1149,9 @@ async def upload_photo_binary(
         db.commit()
         db.refresh(photo)
         logger.info("Photo uploaded: id=%s", photo.id)
-        return {"filename": file.filename, "id": photo.id}
+        return {"photo_url": f"/api/photos/{photo.id}", "id": photo.id}
     except Exception as e:
-        logger.error("Error in upload_photo_binary: %s\n%s", str(e), traceback.format_exc())
+        logger.error("Error in upload_photo_binary: %s\n%s", str(e), traceback.format_enc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"写真アップロードに失敗しました: {str(e)}")
 

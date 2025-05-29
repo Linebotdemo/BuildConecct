@@ -59,7 +59,10 @@ async function fetchShelters() {
     });
 
     console.log("[fetchShelters] Query:", params.toString());
-    const res = await fetch(`/api/shelters?${params}`);
+    const token = localStorage.getItem("auth_token") || "";
+    const res = await fetch(`/api/shelters?${params}`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     const shelters = await res.json() || [];
     console.log("[fetchShelters] Shelters:", shelters.length, shelters[0]);
@@ -360,6 +363,8 @@ async function fetchAlerts() {
   } catch (e) {
     hadError = true;
     console.error("[fetchAlerts] Error:", e.message);
+    updateAlertSection([], true);
+    updateMapAlerts([]);
   }
 
   updateAlertSection(alerts, hadError);
@@ -536,7 +541,6 @@ function updateAdminShelterList(shelters) {
                     </div>
                 </div>
                 <button type="submit">更新</button>
-                <button type="button" class="delete-shelter">削除</button>
             </form>
         </div>
     `)
@@ -569,7 +573,11 @@ function calculateDistanceKm(coord1, coord2) {
  */
 async function showDetails(shelterId) {
   try {
-    const response = await fetch(`/api/shelters`);
+    const token = localStorage.getItem("auth_token") || "";
+    const response = await fetch(`/api/shelters`, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
     const shelters = await response.json();
     const shelter = shelters.find((s) => s.id === shelterId);
     if (!shelter) {
@@ -583,12 +591,12 @@ async function showDetails(shelterId) {
       .join(", ");
     document.getElementById("modal-content").innerHTML = `
             <h4>${shelter.name || "不明"}</h4>
-            <p>住所: ${shelter.address || "なし"}</p>
-            <p>連絡先: ${shelter.contact || "なし"}</p>
-            <p>運営団体: ${shelter.operator || "なし"}</p>
-            <p>開設日時: ${shelter.opened_at ? new Date(shelter.opened_at).toLocaleString() : "―"}</p>
+            <p>住所: ${shelter.address || ""}</p>
+            <p>連絡先: ${shelter.contact || ""}</p>
+            <p>運営団体: ${shelter.operator || ""}</p>
+            <p>開設日時: ${shelter.opened_at ? new Date(shelter.opened_at).toLocaleString() : ""}</p>
             <p>空き状況: ${shelter.current_occupancy || 0}/${shelter.capacity || 0}</p>
-            <p>警報: ${areaAlerts || "なし"}</p>
+            <p>警報: ${areaAlerts || ""}}
             <p>状態: ${shelter.status === "open" ? "開設中" : "閉鎖"}</p>
             ${
               shelter.photos?.length
@@ -610,7 +618,7 @@ async function showDetails(shelterId) {
  */
 function toggleFavorite(shelterId) {
   try {
-    let favorites = JSON.parse(localStorage.getItem("favorites") || "[]");
+    let favorites = JSON.parse(localStorage.getItem("favorites") || []);
     const btn = document.querySelector(`.shelter[data-id="${shelterId}"] .favorite-btn`);
     if (favorites.includes(shelterId)) {
       favorites = favorites.filter((id) => id !== shelterId);
@@ -644,46 +652,53 @@ function initMap() {
     }).addTo(map);
     console.log("[initMap] Map initialized");
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          userLocation = [position.coords.latitude, position.coords.longitude];
-          L.marker(userLocation, {
-            icon: L.divIcon({ className: "user-icon" }),
-          })
-            .addTo(map)
-            .bindPopup("現在地")
-            .openPopup();
-          map.setView(userLocation, 12);
-          console.log("[initMap] User location:", userLocation);
-          fetchShelters();
-          fetchAlerts();
-        },
-        (error) => {
-          console.warn("[initMap] Geolocation error:", error.message);
-          userLocation = [35.6762, 139.6503]; // デフォルト：東京
-          fetchShelters();
-          fetchAlerts();
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        }
-      );
-    } else {
-      console.warn("[initMap] Geolocation not supported");
-      userLocation = [35.6762, 139.6503];
-      fetchShelters();
-      fetchAlerts();
-    }
+    // 位置情報ボタン
+    const geoButton = document.createElement("button");
+    geoButton.textContent = "現在地を取得";
+    geoButton.className = "btn btn-primary";
+    geoButton.onclick = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            userLocation = [position.coords.latitude, position.coords.longitude];
+            L.marker(userLocation, {
+              icon: L.divIcon({ className: "user-icon" }),
+            })
+              .addTo(map)
+              .bindPopup("現在地")
+              .openPopup();
+            map.setView(userLocation, 12);
+            console.log("[initMap] User location:", userLocation);
+            fetchShelters();
+            fetchAlerts();
+          },
+          (error) => {
+            console.warn("[initMap] Geolocation error:", error.message);
+            userLocation = [35.6762, 139.6503];
+            fetchShelters();
+            fetchAlerts();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          }
+        );
+      } else {
+        console.warn("[initMap] Geolocation not supported");
+        userLocation = [35.6762, 139.6503];
+        fetchShelters();
+        fetchAlerts();
+      }
+    };
+    document.querySelector(".container").prepend(geoButton);
   } catch (e) {
     console.error("[initMap] Error:", e.message);
   }
 }
 
 /**
- * DOM読み込み時初期化
+ * DOM読み込み込み時初期化
  */
 document.addEventListener("DOMContentLoaded", () => {
   initMap();
@@ -701,7 +716,7 @@ document.addEventListener("DOMContentLoaded", () => {
   ["filter-status", "filter-distance"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("change", fetchShelters);
-    else console.error(`[DOMContentLoaded] #${id} not found`);
+    else console.error("[DOMContentLoaded] #${id} not found");
   });
 
   [
@@ -733,8 +748,10 @@ document.addEventListener("DOMContentLoaded", () => {
     console.error("[DOMContentLoaded] #shelter-list not found");
   }
 
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(`${proto}//${location.host}/ws/shelters`);
+  const proto = location.protocol === "https:" ? "wss://" : "ws://";
+  const ws = new WebSocket(`${proto}${location.host}/ws/shelters`);
+  ws.onopen = () => console.log("[WebSocket] Connected");
+  ws.onerror = (e) => console.error("[WebSocket] Error:", e);
   ws.onmessage = (e) => {
     try {
       const data = JSON.parse(e.data);
