@@ -85,7 +85,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 ENV = os.getenv("ENV", "production")
 
 # テンプレートディレクトリ設定
-# main.pyのディレクトリを基準にapp/templatesを解決
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 TEMPLATE_DIR = os.getenv("TEMPLATE_DIR", DEFAULT_TEMPLATE_DIR)
@@ -444,7 +443,6 @@ async def create_shelter(
 ):
     try:
         logger.info("Creating shelter: %s, user=%s", shelter.dict(), current_user.email)
-        attributes = shelter.attributes or {}
         db_shelter = ShelterModel(
             name=shelter.name,
             address=shelter.address,
@@ -452,14 +450,14 @@ async def create_shelter(
             longitude=shelter.longitude,
             capacity=shelter.capacity,
             current_occupancy=shelter.current_occupancy,
-            pets_allowed=attributes.get("pets_allowed", False),
-            barrier_free=attributes.get("barrier_free", False),
-            toilet_available=attributes.get("toilet_available", False),
-            food_available=attributes.get("food_available", False),
-            medical_available=attributes.get("medical_available", False),
-            wifi_available=attributes.get("wifi_available", False),
-            charging_available=attributes.get("charging_available", False),
-            equipment=attributes.get("equipment", None),
+            pets_allowed=shelter.pets_allowed,
+            barrier_free=shelter.barrier_free,
+            toilet_available=shelter.toilet_available,
+            food_available=shelter.food_available,
+            medical_available=shelter.medical_available,
+            wifi_available=shelter.wifi_available,
+            charging_available=shelter.charging_available,
+            equipment=shelter.equipment,
             photos=",".join(shelter.photos) if shelter.photos else "",
             contact=shelter.contact,
             operator=shelter.operator,
@@ -482,16 +480,14 @@ async def create_shelter(
             "longitude": db_shelter.longitude,
             "capacity": db_shelter.capacity,
             "current_occupancy": db_shelter.current_occupancy,
-            "attributes": {
-                "pets_allowed": db_shelter.pets_allowed,
-                "barrier_free": db_shelter.barrier_free,
-                "toilet_available": db_shelter.toilet_available,
-                "food_available": db_shelter.food_available,
-                "medical_available": db_shelter.medical_available,
-                "wifi_available": db_shelter.wifi_available,
-                "charging_available": db_shelter.charging_available,
-                "equipment": db_shelter.equipment,
-            },
+            "pets_allowed": db_shelter.pets_allowed,
+            "barrier_free": db_shelter.barrier_free,
+            "toilet_available": db_shelter.toilet_available,
+            "food_available": db_shelter.food_available,
+            "medical_available": db_shelter.medical_available,
+            "wifi_available": db_shelter.wifi_available,
+            "charging_available": db_shelter.charging_available,
+            "equipment": db_shelter.equipment,
             "photos": db_shelter.photos.split(",") if db_shelter.photos else [],
             "contact": db_shelter.contact,
             "operator": db_shelter.operator,
@@ -526,9 +522,6 @@ async def update_shelter(
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="更新権限がありません")
         data = shelter.dict(exclude_unset=True)
-        if "photos" in data:
-            db_shelter.photos = ",".join(data["photos"]) if data["photos"] else ""
-            del data["photos"]
         for k, v in data.items():
             setattr(db_shelter, k, v)
         db_shelter.updated_at = datetime.utcnow()
@@ -545,16 +538,14 @@ async def update_shelter(
             "longitude": db_shelter.longitude,
             "capacity": db_shelter.capacity,
             "current_occupancy": db_shelter.current_occupancy,
-            "attributes": {
-                "pets_allowed": db_shelter.pets_allowed,
-                "barrier_free": db_shelter.barrier_free,
-                "toilet_available": db_shelter.toilet_available,
-                "food_available": db_shelter.food_available,
-                "medical_available": db_shelter.medical_available,
-                "wifi_available": db_shelter.wifi_available,
-                "charging_available": db_shelter.charging_available,
-                "equipment": db_shelter.equipment,
-            },
+            "pets_allowed": db_shelter.pets_allowed,
+            "barrier_free": db_shelter.barrier_free,
+            "toilet_available": db_shelter.toilet_available,
+            "food_available": db_shelter.food_available,
+            "medical_available": db_shelter.medical_available,
+            "wifi_available": db_shelter.wifi_available,
+            "charging_available": db_shelter.charging_available,
+            "equipment": db_shelter.equipment,
             "photos": db_shelter.photos.split(",") if db_shelter.photos else [],
             "contact": db_shelter.contact,
             "operator": db_shelter.operator,
@@ -1072,7 +1063,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             logger.info("WebSocket disconnected: id=%s", client_id)
 
 # ファビコン
-@app.get("/favicon.ico", response_class=FileResponse)
+@app.get("/favicon.ico", response_class=Response)
 async def favicon():
     try:
         favicon_path = os.path.join(STATIC_DIR, "favicon.ico")
