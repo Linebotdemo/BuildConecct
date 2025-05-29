@@ -681,14 +681,81 @@ async def bulk_delete_shelters(
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
 @app.get("/api/shelters")
-async def get_shelters(db: Session = Depends(get_db), ...):
-    shelters = db.query(ShelterModel).all()
+async def get_shelters(
+    db: Session = Depends(get_db),
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    distance: Optional[float] = Query(None),
+    latitude: Optional[float] = Query(None),
+    longitude: Optional[float] = Query(None),
+    pets_allowed: Optional[bool] = Query(None),
+    barrier_free: Optional[bool] = Query(None),
+    toilet_available: Optional[bool] = Query(None),
+    food_available: Optional[bool] = Query(None),
+    medical_available: Optional[bool] = Query(None),
+    wifi_available: Optional[bool] = Query(None),
+    charging_available: Optional[bool] = Query(None)
+):
+    query = db.query(ShelterModel)
+    
+    # 検索フィルタ
+    if search:
+        search = f"%{search}%"
+        query = query.filter(
+            (ShelterModel.name.ilike(search)) |
+            (ShelterModel.address.ilike(search))
+        )
+    
+    # 状態フィルタ
+    if status:
+        query = query.filter(ShelterModel.status == status)
+    
+    # 属性フィルタ
+    if pets_allowed:
+        query = query.filter(ShelterModel.attributes['pets_allowed'].astext.cast(Boolean) == True)
+    if barrier_free:
+        query = query.filter(ShelterModel.attributes['barrier_free'].astext.cast(Boolean) == True)
+    if toilet_available:
+        query = query.filter(ShelterModel.attributes['toilet_available'].astext.cast(Boolean) == True)
+    if food_available:
+        query = query.filter(ShelterModel.attributes['food_available'].astext.cast(Boolean) == True)
+    if medical_available:
+        query = query.filter(ShelterModel.attributes['medical_available'].astext.cast(Boolean) == True)
+    if wifi_available:
+        query = query.filter(ShelterModel.attributes['wifi_available'].astext.cast(Boolean) == True)
+    if charging_available:
+        query = query.filter(ShelterModel.attributes['charging_available'].astext.cast(Boolean) == True)
+
+    shelters = query.all()
+
+    # 距離フィルタ（サーバーサイドでの計算）
+    if distance and latitude and longitude:
+        from math import radians, sin, cos, sqrt, atan2
+        def haversine(lat1, lon1, lat2, lon2):
+            R = 6371  # 地球の半径（km）
+            dlat = radians(lat2 - lat1)
+            dlon = radians(lon2 - lon1)
+            a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+            c = 2 * atan2(sqrt(a), sqrt(1-a))
+            return R * c
+
+        filtered_shelters = []
+        for shelter in shelters:
+            if shelter.latitude and shelter.longitude:
+                dist = haversine(latitude, longitude, shelter.latitude, shelter.longitude)
+                if dist <= distance:
+                    filtered_shelters.append(shelter)
+        shelters = filtered_shelters
+
+    # 写真と属性の正規化
     for shelter in shelters:
         if shelter.photos and not isinstance(shelter.photos, list):
             shelter.photos = [shelter.photos] if shelter.photos else []
             for i, photo in enumerate(shelter.photos):
                 if not os.path.exists(f"app/data/photos/{photo}"):
                     shelter.photos[i] = "/static/placeholder.jpg"
+        shelter.attributes = shelter.attributes or {}
+
     return shelters
 
 # 写真アップロード（単一）
