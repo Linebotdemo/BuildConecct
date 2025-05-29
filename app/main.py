@@ -83,21 +83,33 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 ENV = os.getenv("ENV", "production")
-TEMPLATE_DIR = os.getenv("TEMPLATE_DIR", "app/templates")
+
+# テンプレートディレクトリ設定
+# main.pyのディレクトリを基準にapp/templatesを解決
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+TEMPLATE_DIR = os.getenv("TEMPLATE_DIR", DEFAULT_TEMPLATE_DIR)
 
 # テンプレートディレクトリ確認
 try:
     os.makedirs(TEMPLATE_DIR, exist_ok=True)
     logger.info("Template directory: %s", os.path.abspath(TEMPLATE_DIR))
-    logger.info("Available templates: %s", os.listdir(TEMPLATE_DIR))
+    template_files = os.listdir(TEMPLATE_DIR)
+    logger.info("Available templates: %s", template_files)
+    if "index.html" not in template_files:
+        logger.warning("index.html not found in template directory")
+    if "login.html" not in template_files:
+        logger.warning("login.html not found in template directory")
 except Exception as e:
     logger.error("Error accessing template directory: %s", str(e))
 
 # 静的ファイル・テンプレート設定
-os.makedirs("app/static", exist_ok=True)
-os.makedirs("app/data", exist_ok=True)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-app.mount("/data", StaticFiles(directory="app/data"), name="data")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(STATIC_DIR, exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+app.mount("/data", StaticFiles(directory=DATA_DIR), name="data")
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 connected_clients: Dict[str, WebSocket] = {}
 
@@ -244,7 +256,6 @@ async def broadcast_shelter_update(data: dict):
 async def login_get(request: Request):
     try:
         logger.info("Rendering login.html for GET /login")
-        # テンプレートファイルの存在確認
         template_path = os.path.join(TEMPLATE_DIR, "login.html")
         if not os.path.exists(template_path):
             logger.error("Template file not found: %s", template_path)
@@ -270,6 +281,10 @@ async def login_post(
         company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
         if not company or not pwd_context.verify(password, company.hashed_pw):
             logger.error("Login failed: username=%s", username)
+            template_path = os.path.join(TEMPLATE_DIR, "login.html")
+            if not os.path.exists(template_path):
+                logger.error("Template file not found: %s", template_path)
+                raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
             return templates.TemplateResponse(
                 "login.html",
                 {"request": request, "error": "メールアドレスまたはパスワードが正しくありません"},
@@ -320,6 +335,10 @@ async def login_post(
         return template_response
     except Exception as e:
         logger.error("Error in login_post: %s\n%s", str(e), traceback.format_exc())
+        template_path = os.path.join(TEMPLATE_DIR, "login.html")
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": f"ログインに失敗しました: {str(e)}"},
@@ -345,6 +364,10 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
         raise HTTPException(status_code=500, detail="認証パスワードが設定されていません")
     if auth_password != REG_PASS:
         logger.error("Invalid registration password")
+        template_path = os.path.join(TEMPLATE_DIR, "register_auth.html")
+        if not os.path.exists(template_path):
+            logger.error("Template file not found: %s", template_path)
+            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         return templates.TemplateResponse(
             "register_auth.html",
             {"request": request, "error": "パスワードが正しくありません"},
@@ -649,13 +672,13 @@ async def upload_photo(
         if db_shelter.company_id != current_user.id and current_user.role != "admin":
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="アップロード権限がありません")
-        os.makedirs("app/data/photos", exist_ok=True)
+        os.makedirs(os.path.join(DATA_DIR, "photos"), exist_ok=True)
         file_ext = file.filename.split(".")[-1].lower()
         if file_ext not in ["jpg", "jpeg", "png", "gif"]:
             logger.error("Invalid file extension: %s", file_ext)
             raise HTTPException(status_code=400, detail="許可されていないファイル形式です")
         filename = f"{uuid.uuid4()}.{file_ext}"
-        file_path = os.path.join("app/data/photos", filename)
+        file_path = os.path.join(DATA_DIR, "photos", filename)
         with open(file_path, "wb") as f:
             f.write(await file.read())
         photo_url = f"/data/photos/{filename}"
@@ -688,7 +711,7 @@ async def upload_photos(
         if db_shelter.company_id != current_user.id and current_user.role != "admin":
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="アップロード権限がありません")
-        os.makedirs("app/data/photos", exist_ok=True)
+        os.makedirs(os.path.join(DATA_DIR, "photos"), exist_ok=True)
         photo_urls = []
         for file in files:
             file_ext = file.filename.split(".")[-1].lower()
@@ -696,7 +719,7 @@ async def upload_photos(
                 logger.error("Invalid file extension: %s", file_ext)
                 continue
             filename = f"{uuid.uuid4()}.{file_ext}"
-            file_path = os.path.join("app/data/photos", filename)
+            file_path = os.path.join(DATA_DIR, "photos", filename)
             with open(file_path, "wb") as f:
                 f.write(await file.read())
             photo_url = f"/data/photos/{filename}"
@@ -807,9 +830,9 @@ async def proxy(url: str):
 
 # 災害アラート取得
 def fetch_weather_alerts():
-    cache_file = "app/data/alerts_cache.json"
+    cache_file = os.path.join(DATA_DIR, "alerts_cache.json")
     try:
-        os.makedirs("app/data", exist_ok=True)
+        os.makedirs(DATA_DIR, exist_ok=True)
         if os.path.exists(cache_file):
             with open(cache_file, "r", encoding="utf-8") as f:
                 cache = json.load(f)
@@ -1052,11 +1075,12 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
 @app.get("/favicon.ico", response_class=FileResponse)
 async def favicon():
     try:
-        favicon_path = os.path.join("app/static", "favicon.ico")
+        favicon_path = os.path.join(STATIC_DIR, "favicon.ico")
         if os.path.exists(favicon_path):
+            logger.info("Serving favicon: %s", favicon_path)
             return FileResponse(favicon_path)
-        logger.warning("Favicon not found")
+        logger.warning("Favicon not found at: %s", favicon_path)
         return Response(status_code=204)
     except Exception as e:
-        logger.error("Error: %s\n%s", str(e), traceback.format_exc())
+        logger.error("Error serving favicon: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ファビコン取得に失敗しました: {str(e)}")
