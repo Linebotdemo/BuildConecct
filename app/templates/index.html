@@ -52,14 +52,14 @@
       <h3>フィルタ</h3>
       <form id="filter-form" class="d-flex flex-wrap align-items-center gap-3">
         <!-- 属性チェック -->
-        {% for name,label in [
-           ['pets_allowed','ペット可'],
-           ['barrier_free','バリアフリー'],
-           ['toilet_available','トイレ'],
-           ['food_available','食料提供'],
-           ['medical_available','医療対応'],
-           ['wifi_available','Wi-Fi'],
-           ['charging_available','充電設備']
+        {% for name, label in [
+           ['pets_allowed', 'ペット可'],
+           ['barrier_free', 'バリアフリー'],
+           ['toilet_available', 'トイレ'],
+           ['food_available', '食料提供'],
+           ['medical_available', '医療対応'],
+           ['wifi_available', 'Wi-Fi'],
+           ['charging_available', '充電設備']
          ] %}
           <div class="form-check form-check-inline">
             <input class="form-check-input"
@@ -107,6 +107,29 @@
             <p>状態: {{ '開設中' if s.status=='open' else '閉鎖' }}</p>
             <p>定員: {{ s.capacity }}人</p>
             <p>現在人数: {{ s.current_occupancy }}人 ({{ (s.current_occupancy/s.capacity*100)|round(1) }}%)</p>
+            
+            <!-- 属性タグ -->
+            <div class="tags mb-2">
+              {% set attribute_labels = {
+                'pets_allowed': ['ペット可', '🐾'],
+                'barrier_free': ['バリアフリー', '♿'],
+                'toilet_available': ['トイレ', '🚻'],
+                'food_available': ['食料', '🍽️'],
+                'medical_available': ['医療', '🏥'],
+                'wifi_available': ['Wi-Fi', '📶'],
+                'charging_available': ['充電', '🔌']
+              } %}
+              {% set has_attributes = False %}
+              {% for key, [label, icon] in attribute_labels.items() %}
+                {% if s.attributes and s.attributes[key] %}
+                  <span class="badge bg-info me-1">{{ icon }} {{ label }}</span>
+                  {% set has_attributes = True %}
+                {% endif %}
+              {% endfor %}
+              {% if not has_attributes %}
+                <span class="badge bg-secondary">属性なし</span>
+              {% endif %}
+            </div>
 
             <div class="occupancy-bar mb-2">
               <div class="occupancy-fill {% if s.current_occupancy/s.capacity>=0.8 %}warning{% endif %}"
