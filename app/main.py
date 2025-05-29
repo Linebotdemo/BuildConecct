@@ -6,6 +6,7 @@ import io
 import logging
 import traceback
 from datetime import datetime, timedelta
+from sqlalchemy.sql import func
 from typing import List, Optional, Dict
 from fastapi import (
     FastAPI,
@@ -384,6 +385,17 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
 @app.get("/api/shelters", response_model=List[ShelterSchema])
 async def get_shelters(
     search: Optional[str] = None,
+    pets_allowed: Optional[bool] = Query(None),
+    barrier_free: Optional[bool] = Query(None),
+    toilet_available: Optional[bool] = Query(None),
+    food_available: Optional[bool] = Query(None),
+    medical_available: Optional[bool] = Query(None),
+    wifi_available: Optional[bool] = Query(None),
+    charging_available: Optional[bool] = Query(None),
+    status: Optional[str] = Query(None, pattern="^(open|closed)?$"),
+    distance: Optional[float] = Query(None, ge=0),
+    latitude: Optional[float] = Query(None),  # ユーザーの現在地
+    longitude: Optional[float] = Query(None),  # ユーザーの現在地
     db: Session = Depends(get_db),
     current_user: CompanyModel = Depends(get_current_user),
 ):
@@ -392,15 +404,36 @@ async def get_shelters(
         query = db.query(ShelterModel)
         if current_user.role != "admin":
             query = query.filter(ShelterModel.company_id == current_user.id)
-            logger.debug("Filtered by company_id: %s", current_user.id)
         if search:
-            query = query.filter(ShelterModel.name.ilike(f"%{search}%"))
-            logger.debug("Filtered by search: %s", search)
+            query = query.filter(ShelterModel.name.ilike(f"%{search}%") | ShelterModel.address.ilike(f"%{search}%"))
+        if status:
+            query = query.filter(ShelterModel.status == status)
+        if pets_allowed is not None:
+            query = query.filter(ShelterModel.pets_allowed == pets_allowed)
+        if barrier_free is not None:
+            query = query.filter(ShelterModel.barrier_free == barrier_free)
+        if toilet_available is not None:
+            query = query.filter(ShelterModel.toilet_available == toilet_available)
+        if food_available is not None:
+            query = query.filter(ShelterModel.food_available == food_available)
+        if medical_available is not None:
+            query = query.filter(ShelterModel.medical_available == medical_available)
+        if wifi_available is not None:
+            query = query.filter(ShelterModel.wifi_available == wifi_available)
+        if charging_available is not None:
+            query = query.filter(ShelterModel.charging_available == charging_available)
+        if distance and latitude is not None and longitude is not None:
+            # ハバーサイン公式で距離を計算（SQL）
+            query = query.filter(
+                6371 * func.acos(
+                    func.cos(func.radians(latitude)) * func.cos(func.radians(ShelterModel.latitude)) *
+                    func.cos(func.radians(ShelterModel.longitude) - func.radians(longitude)) +
+                    func.sin(func.radians(latitude)) * func.sin(func.radians(ShelterModel.latitude))
+                ) <= distance
+            )
         shelters_orm = query.all()
-        logger.debug("Fetched %d shelters from DB", len(shelters_orm))
         shelters = []
         for s in shelters_orm:
-            logger.debug("Processing shelter: id=%s, name=%s", s.id, s.name)
             shelter_data = {
                 "id": s.id,
                 "name": s.name,
