@@ -993,7 +993,7 @@ async def geocode_address_endpoint(address: str):
 @app.get("/api/proxy")
 async def proxy_endpoint(url: str):
     try:
-        logger.info("Proxying request: %s, url)
+        logger.info("Proxying request: %s", url)
         # JMAのURL修正
         if "jma.go.jp" in url and "warning/00.json" in url:
             url = "https://www.jma.go.jp/bosai/forecast/data/warning.json"
