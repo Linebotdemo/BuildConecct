@@ -75,8 +75,8 @@ async function fetchShelters() {
     console.log("[fetchShelters] Shelters:", shelters.length, shelters[0]);
     updateShelterList(shelters);
     updateMap(shelters);
-    updateAdminShelterList(shelters);
-    updateAdminMap(shelters);
+    updateAdminShelterList(shelters); // 管理者リストも更新
+    updateAdminMap(shelters); // 管理者マップも更新
   } catch (e) {
     console.error("[fetchShelters] Error:", e.message);
     updateShelterList([]);
@@ -869,12 +869,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // 検索バー
   const searchInput = document.getElementById("search");
   if (searchInput) {
+    console.error("[DOMContentLoaded] #search not found");
+  } else {
     searchInput.addEventListener("input", () => {
       clearTimeout(searchInput.debounceTimer);
       searchInput.debounceTimer = setTimeout(fetchShelters, 300);
     });
-  } else {
-    console.error("[DOMContentLoaded] #search not found");
   }
 
   // フィルター
@@ -912,35 +912,33 @@ document.addEventListener("DOMContentLoaded", () => {
           modalImg.src = ev.target.src;
           new bootstrap.Modal(document.getElementById("imageModal")).show();
         }
-      }
+      });
     });
   } else {
     console.error("[DOMContentLoaded] #shelter-list not found");
   }
 
   // WebSocket
-  let ws;
-  function connectWebSocket() {
-    const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    ws = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
-    
-    ws.onopen = () => console.log("[WebSocket] Connected");
-    ws.onerror = (e) => console.error("[WebSocket] Error:", e);
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        console.log("[WebSocket] Received:", data);
-        fetchShelters();
-      } catch (err) {
-        console.error("[WebSocket] Parse error:", err.message);
-      }
-    };
-    ws.onclose = () => {
-      console.log("[WebSocket] Disconnected, reconnecting...");
-      setTimeout(connectWebSocket, 5000);
-    };
-  }
-  connectWebSocket();
+  const proto = location.protocol === "https:" ? "wss://" : "ws://";
+  const ws = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
+  ws.onopen = () => console.log("[WebSocket] Connected");
+  ws.onerror = (e) => console.error("[WebSocket] Error:", e);
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      console.log("[WebSocket] Received:", data);
+      fetchShelters(); // 最新データを取得
+    } catch (err) {
+      console.error("[WebSocket] Parse error:", err.message);
+    }
+  };
+  ws.onclose = () => {
+    console.log("[WebSocket] Disconnected, reconnecting...");
+    setTimeout(() => {
+      const reconnectWs = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
+      ws = reconnectWs;
+    }, 5000);
+  };
 
   // 定期更新
   setInterval(fetchAlerts, 5 * 60 * 1000); // 5分毎
