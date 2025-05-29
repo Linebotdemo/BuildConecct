@@ -4,8 +4,6 @@ let map, userLocation, markers = [], alertPolygons = [], adminMap, adminMarkers 
 
 /**
  * Yahoo ジオコーディング API で住所を緯度経度に変換
- * @param {string} address - ジオコーディングする住所
- * @returns {Promise<[number, number]>} - [緯度, 経度]
  */
 async function geocodeWithYahoo(address) {
   try {
@@ -29,7 +27,7 @@ async function geocodeWithYahoo(address) {
 }
 
 /**
- * 避難所をサーバーから取得し、リストとマップを更新
+ * 避難所を取得
  */
 async function fetchShelters() {
   try {
@@ -76,7 +74,6 @@ async function fetchShelters() {
 
 /**
  * 避難所リストを描画
- * @param {Array} shelters - 避難所データ
  */
 function updateShelterList(shelters) {
   const container = document.getElementById("shelter-list");
@@ -136,7 +133,10 @@ function updateShelterList(shelters) {
           ${
             shelter.photos?.length
               ? `<div class="photo-gallery mb-2">${shelter.photos
-                  .map((p) => `<img src="${p}" class="photo-preview me-1 rounded" style="width:100px;cursor:pointer;">`)
+                  .map(
+                    (p) =>
+                      `<img src="${p || '/static/placeholder.jpg'}" class="photo-preview me-1 rounded" style="width:100px;cursor:pointer;" alt="サムネイル">`
+                  )
                   .join("")}</div>`
               : ""
           }
@@ -189,8 +189,7 @@ function updateShelterList(shelters) {
 }
 
 /**
- * マップ上にピンを表示
- * @param {Array} shelters - 避難所データ
+ * マップにピンを表示
  */
 function updateMap(shelters) {
   try {
@@ -231,7 +230,7 @@ function updateMap(shelters) {
 }
 
 /**
- * 管理者用マップを初期化
+ * 管理者用マップ初期化
  */
 function initAdminMap() {
   try {
@@ -249,8 +248,7 @@ function initAdminMap() {
 }
 
 /**
- * 管理者用マップにピンを表示
- * @param {Array} shelters - 避難所データ
+ * 管理者用ピン表示
  */
 function updateAdminMap(shelters) {
   try {
@@ -286,9 +284,7 @@ function updateAdminMap(shelters) {
 }
 
 /**
- * 管理者用ピンの更新
- * @param {number} shelterId - 避難所ID
- * @param {string} address - 新しい住所
+ * 管理者用ピン更新
  */
 async function updateAdminMapPin(shelterId, address) {
   try {
@@ -332,7 +328,9 @@ async function fetchAlerts() {
   const proxyUrl = `/proxy?url=${encodeURIComponent(urlJMA)}`;
   console.log("[fetchAlerts] Proxy URL:", proxyUrl);
 
-kite jars;
+  try {
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`JMA API error: ${res.status}`);
     const jsonData = await res.json();
     console.log("[fetchAlerts] JSON keys:", Object.keys(jsonData));
 
@@ -351,7 +349,7 @@ kite jars;
             warning_type: w.kind.name,
             description: w.kind.name,
             issued_at: w.issued,
-            level: w.kind.name.includes("特別") ? "特別警報" : w.kind.includes("警報") ? "警報" : "注意報",
+            level: w.kind.name.includes("特別") ? "特別警報" : w.kind.name.includes("警報") ? "警報" : "注意報",
             polygon: area.polygon,
           });
         });
@@ -369,9 +367,7 @@ kite jars;
 }
 
 /**
- * 警報セクションを更新
- * @param {Array} alerts - 警報データ
- * @param {boolean} hadError - エラー
+ * 警報セクション更新
  */
 function updateAlertSection(alerts, hadError = false) {
   const elem = document.getElementById("alert-section");
@@ -411,8 +407,7 @@ function updateAlertSection(alerts, hadError = false) {
 }
 
 /**
- * マップに警報ポリゴンを表示
- * @param {Array} alerts - 警報データ
+ * マップに警報ポリゴン表示
  */
 function updateMapAlerts(alerts) {
   try {
@@ -444,8 +439,7 @@ function updateMapAlerts(alerts) {
 }
 
 /**
- * 管理者用リストを更新
- * @param {Array} shelters - 避難所データ
+ * 管理者用リスト更新
  */
 function updateAdminShelterList(shelters) {
   const shelterList = document.getElementById("admin-shelter-list");
@@ -535,7 +529,7 @@ function updateAdminShelterList(shelters) {
                         ${
                           shelter.photos?.length
                             ? `<div>${shelter.photos
-                                .map((p) => `<img src="${p}" class="photo-preview">`)
+                                .map((p) => `<img src="${p || '/static/placeholder.jpg'}" class="photo-preview">`)
                                 .join("")}</div>`
                             : ""
                         }
@@ -550,10 +544,7 @@ function updateAdminShelterList(shelters) {
 }
 
 /**
- * 距離を計算
- * @param {Array<number>} coord1 - [緯度, 経度]
- * @param {Array<number>} coord2 - [緯度, 経度]
- * @returns {number} - 距離（km）
+ * 距離計算
  */
 function calculateDistanceKm(coord1, coord2) {
   try {
@@ -574,8 +565,7 @@ function calculateDistanceKm(coord1, coord2) {
 }
 
 /**
- * 詳細モーダルを表示
- * @param {number} shelterId - 避難所ID
+ * 詳細モーダル表示
  */
 async function showDetails(shelterId) {
   try {
@@ -603,7 +593,7 @@ async function showDetails(shelterId) {
             ${
               shelter.photos?.length
                 ? `<div>${shelter.photos
-                    .map((p) => `<img src="${p}" class="photo-preview">`)
+                    .map((p) => `<img src="${p || '/static/placeholder.jpg'}" class="photo-preview">`)
                     .join("")}</div>`
                 : ""
             }
@@ -616,8 +606,7 @@ async function showDetails(shelterId) {
 }
 
 /**
- * お気に入りをトグル
- * @param {number} shelterId - 避難所ID
+ * お気に入りトグル
  */
 function toggleFavorite(shelterId) {
   try {
@@ -640,7 +629,7 @@ function toggleFavorite(shelterId) {
 }
 
 /**
- * マップを初期化
+ * マップ初期化
  */
 function initMap() {
   try {
@@ -694,7 +683,7 @@ function initMap() {
 }
 
 /**
- * DOM読み込み時の初期化
+ * DOM読み込み時初期化
  */
 document.addEventListener("DOMContentLoaded", () => {
   initMap();

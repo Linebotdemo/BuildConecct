@@ -6,16 +6,10 @@
   <title>日本版 Smart Shelter</title>
 
   <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <!-- Bootstrap CSS -->
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-  />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
 
   <!-- カスタム CSS -->
   <link rel="stylesheet" href="/static/style.css" />
@@ -44,16 +38,14 @@
         type="text"
         id="search"
         placeholder="避難所名、住所、キーワードで検索"
-        oninput="fetchShelters()"
         class="form-control"
       />
     </div>
 
     <!-- 災害警報 -->
-  <div id="alert-section" class="alert-section">
-    <p>読み込み中…</p>
-  </div>
-
+    <div id="alert-section" class="alert-section">
+      <p>読み込み中…</p>
+    </div>
 
     <!-- フィルタ -->
     <div class="mb-4">
@@ -74,26 +66,25 @@
                    type="checkbox"
                    name="{{ name }}"
                    id="filter-{{ name }}"
-                   onchange="fetchShelters()">
+            >
             <label class="form-check-label" for="filter-{{ name }}">{{ label }}</label>
           </div>
         {% endfor %}
 
         <!-- 状態フィルタ -->
-  <div class="form-group d-flex align-items-center ms-3">
-    <label for="filter-status" class="me-2 mb-0">状態:</label>
-    <select id="filter-status" class="form-select form-select-sm w-auto"
-            onchange="fetchShelters()">
-      <option value="">全て</option>
-      <option value="open">開設中</option>
-      <option value="closed">閉鎖</option>
-    </select>
-  </div>
+        <div class="form-group d-flex align-items-center ms-3">
+          <label for="filter-status" class="me-2 mb-0">状態:</label>
+          <select id="filter-status" class="form-select form-select-sm w-auto">
+            <option value="">全て</option>
+            <option value="open">開設中</option>
+            <option value="closed">閉鎖</option>
+          </select>
+        </div>
 
         <!-- 距離フィルタ -->
         <div class="form-group d-flex align-items-center ms-3">
           <label for="filter-distance" class="me-2 mb-0">範囲:</label>
-          <select id="filter-distance" class="form-select form-select-sm w-auto" onchange="fetchShelters()">
+          <select id="filter-distance" class="form-select form-select-sm w-auto">
             <option value="0">全て</option>
             <option value="5">5km以内</option>
             <option value="10">10km以内</option>
@@ -160,27 +151,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="/static/script.js"></script>
-
-  <script>
-    document.addEventListener('DOMContentLoaded',()=>{
-      initMap();
-
-      // WebSocket 更新
-      const proto = location.protocol==='https:'?'wss:':'ws:';
-      const ws    = new WebSocket(`${proto}//${location.host}/ws/shelters`);
-      ws.onmessage = e => updateShelterList([JSON.parse(e.data)]);
-
-      // サムネイル拡大
-      document.getElementById('shelter-list')
-        .addEventListener('click',ev=>{
-          if(ev.target.classList.contains('photo-preview')){
-            document.getElementById('modalImg').src = ev.target.src;
-            new bootstrap.Modal(document.getElementById('imageModal')).show();
-          }
-        });
-    });
-
-
+  <script src="/static/script.js" defer></script>
 </body>
 </html>

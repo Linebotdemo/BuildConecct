@@ -7,6 +7,7 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 from sqlalchemy.sql import func
+from fastapi import FastAPI, Depends
 from typing import List, Optional, Dict
 from fastapi import (
     FastAPI,
@@ -678,6 +679,17 @@ async def bulk_delete_shelters(
         logger.error("Error in bulk_delete_shelters: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
+
+@app.get("/api/shelters")
+async def get_shelters(db: Session = Depends(get_db), ...):
+    shelters = db.query(ShelterModel).all()
+    for shelter in shelters:
+        if shelter.photos and not isinstance(shelter.photos, list):
+            shelter.photos = [shelter.photos] if shelter.photos else []
+            for i, photo in enumerate(shelter.photos):
+                if not os.path.exists(f"app/data/photos/{photo}"):
+                    shelter.photos[i] = "/static/placeholder.jpg"
+    return shelters
 
 # 写真アップロード（単一）
 @app.post("/api/shelters/upload-photo")
