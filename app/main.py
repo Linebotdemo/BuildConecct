@@ -97,11 +97,14 @@ try:
     logger.info("Template directory: %s", os.path.abspath(TEMPLATE_DIR))
     template_files = os.listdir(TEMPLATE_DIR)
     logger.info("Available templates: %s", template_files)
-    for template in ["index.html", "login.html", "company-dashboard.html", "admin.html", "register.html", "register_auth.html"]:
+    required_templates = ["index.html", "login.html", "admin.html", "register.html", "register_auth.html"]
+    for template in required_templates:
         if template not in template_files:
-            logger.warning(f"{template} not found in template directory")
+            logger.error(f"Required template {template} not found in {TEMPLATE_DIR}")
+            raise FileNotFoundError(f"Template {template} is missing")
 except Exception as e:
     logger.error("Error accessing template directory: %s", str(e))
+    raise
 
 # 静的ファイル・データディレクトリ設定
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -137,7 +140,8 @@ client = httpx.AsyncClient(timeout=10.0)
 async def on_startup():
     logger.info("Starting database initialization...")
     try:
-        Base.metadata.create_all(bind=engine)  # テーブル作成
+        # テーブル作成を確実に実行
+        Base.metadata.create_all(bind=engine)
         with SessionLocal() as db:
             # 管理者アカウントの初期化
             admin = db.query(CompanyModel).filter(CompanyModel.email == "admin@example.com").first()
@@ -146,7 +150,7 @@ async def on_startup():
                 admin = CompanyModel(
                     email="admin@example.com",
                     name="管理者",
-                    hashed_pw=hashed_pw,
+                    hashed_password=hashed_pw,
                     role="admin",
                     created_at=datetime.utcnow(),
                 )
@@ -156,7 +160,7 @@ async def on_startup():
             else:
                 logger.info("Admin account exists: email=%s, role=%s", admin.email, admin.role)
 
-            # サンプル避難所の挿入（デバッグ用）
+            # サンプル避難所の挿入
             if not db.query(ShelterModel).first():
                 sample_shelter = ShelterModel(
                     name="テスト避難所",
@@ -165,17 +169,16 @@ async def on_startup():
                     longitude=139.70341014,
                     capacity=100,
                     current_occupancy=10,
+                    pets_allowed=True,
+                    barrier_free=True,
+                    toilet_available=True,
+                    food_available=False,
+                    medical_available=False,
+                    wifi_available=True,
+                    charging_available=False,
+                    equipment="",
                     status="open",
                     photos="",
-                    attributes={
-                        "pets_allowed": True,
-                        "barrier_free": True,
-                        "toilet_available": True,
-                        "food_available": False,
-                        "medical_available": False,
-                        "wifi_available": True,
-                        "charging_available": False,
-                    },
                     contact="03-1234-5678",
                     operator="テスト運営",
                     company_id=admin.id,
@@ -236,7 +239,7 @@ async def create_company_access_token(
 ):
     logger.info("Token request: username=%s", form_data.username)
     company = db.query(CompanyModel).filter(CompanyModel.email == form_data.username).first()
-    if not company or not pwd_context.verify(form_data.password, company.hashed_pw):
+    if not company or not pwd_context.verify(form_data.password, company.hashed_password):
         logger.error("Authentication failed for username: %s", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -293,10 +296,6 @@ async def broadcast_shelter_update(data: dict):
 async def login_get(request: Request):
     try:
         logger.info("Rendering login.html for GET /login")
-        template_path = os.path.join(TEMPLATE_DIR, "login.html")
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": None},
@@ -316,12 +315,8 @@ async def login_post(
     try:
         logger.info("Login attempt: username=%s", username)
         company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
-        if not company or not pwd_context.verify(password, company.hashed_pw):
+        if not company or not pwd_context.verify(password, company.hashed_password):
             logger.error("Login failed: username=%s", username)
-            template_path = os.path.join(TEMPLATE_DIR, "login.html")
-            if not os.path.exists(template_path):
-                logger.error("Template file not found: %s", template_path)
-                raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
             return templates.TemplateResponse(
                 "login.html",
                 {"request": request, "error": "メールアドレスまたはパスワードが正しくありません"},
@@ -350,11 +345,7 @@ async def login_post(
         except Exception as e:
             logger.error("Error fetching shelters/logs: %s\n%s", str(e), traceback.format_exc())
 
-        template_name = "admin.html" if company.role == "admin" else "company-dashboard.html"
-        template_path = os.path.join(TEMPLATE_DIR, template_name)
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
+        template_name = "admin.html" if company.role == "admin" else "index.html"
         template_response = templates.TemplateResponse(
             template_name,
             {
@@ -372,10 +363,6 @@ async def login_post(
         return template_response
     except Exception as e:
         logger.error("Error in login_post: %s\n%s", str(e), traceback.format_exc())
-        template_path = os.path.join(TEMPLATE_DIR, "login.html")
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": f"ログインに失敗しました: {str(e)}"},
@@ -387,10 +374,6 @@ async def register_page(request: Request):
     if not REG_PASS:
         logger.error("REG_PASS is not set")
         raise HTTPException(status_code=500, detail="認証パスワードが設定されていません")
-    template_path = os.path.join(TEMPLATE_DIR, "register_auth.html")
-    if not os.path.exists(template_path):
-        logger.error("Template file not found: %s", template_path)
-        raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
     return templates.TemplateResponse("register_auth.html", {"request": request})
 
 # 登録認証処理（POST）
@@ -401,18 +384,10 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
         raise HTTPException(status_code=500, detail="認証パスワードが設定されていません")
     if auth_password != REG_PASS:
         logger.error("Invalid registration password")
-        template_path = os.path.join(TEMPLATE_DIR, "register_auth.html")
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
         return templates.TemplateResponse(
             "register_auth.html",
             {"request": request, "error": "パスワードが正しくありません"},
         )
-    template_path = os.path.join(TEMPLATE_DIR, "register.html")
-    if not os.path.exists(template_path):
-        logger.error("Template file not found: %s", template_path)
-        raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
     return templates.TemplateResponse(
         "register.html",
         {"request": request, "companies": []},
@@ -451,21 +426,21 @@ async def get_shelters(
         if status:
             query = query.filter(ShelterModel.status == status)
 
-        # 属性フィルタ（attributes JSON カラムを使用）
+        # 属性フィルタ（個別カラムを使用）
         if pets_allowed is not None:
-            query = query.filter(ShelterModel.attributes['pets_allowed'].astext.cast(Boolean) == pets_allowed)
+            query = query.filter(ShelterModel.pets_allowed == pets_allowed)
         if barrier_free is not None:
-            query = query.filter(ShelterModel.attributes['barrier_free'].astext.cast(Boolean) == barrier_free)
+            query = query.filter(ShelterModel.barrier_free == barrier_free)
         if toilet_available is not None:
-            query = query.filter(ShelterModel.attributes['toilet_available'].astext.cast(Boolean) == toilet_available)
+            query = query.filter(ShelterModel.toilet_available == toilet_available)
         if food_available is not None:
-            query = query.filter(ShelterModel.attributes['food_available'].astext.cast(Boolean) == food_available)
+            query = query.filter(ShelterModel.food_available == food_available)
         if medical_available is not None:
-            query = query.filter(ShelterModel.attributes['medical_available'].astext.cast(Boolean) == medical_available)
+            query = query.filter(ShelterModel.medical_available == medical_available)
         if wifi_available is not None:
-            query = query.filter(ShelterModel.attributes['wifi_available'].astext.cast(Boolean) == wifi_available)
+            query = query.filter(ShelterModel.wifi_available == wifi_available)
         if charging_available is not None:
-            query = query.filter(ShelterModel.attributes['charging_available'].astext.cast(Boolean) == charging_available)
+            query = query.filter(ShelterModel.charging_available == charging_available)
 
         shelters = query.all()
 
@@ -509,15 +484,15 @@ async def get_shelters(
                 "longitude": shelter.longitude,
                 "capacity": shelter.capacity,
                 "current_occupancy": shelter.current_occupancy,
-                "attributes": shelter.attributes or {
-                    "pets_allowed": shelter.pets_allowed if hasattr(shelter, "pets_allowed") else False,
-                    "barrier_free": shelter.barrier_free if hasattr(shelter, "barrier_free") else False,
-                    "toilet_available": shelter.toilet_available if hasattr(shelter, "toilet_available") else False,
-                    "food_available": shelter.food_available if hasattr(shelter, "food_available") else False,
-                    "medical_available": shelter.medical_available if hasattr(shelter, "medical_available") else False,
-                    "wifi_available": shelter.wifi_available if hasattr(shelter, "wifi_available") else False,
-                    "charging_available": shelter.charging_available if hasattr(shelter, "charging_available") else False,
-                    "equipment": shelter.equipment if hasattr(shelter, "equipment") else "",
+                "attributes": {
+                    "pets_allowed": shelter.pets_allowed,
+                    "barrier_free": shelter.barrier_free,
+                    "toilet_available": shelter.toilet_available,
+                    "food_available": shelter.food_available,
+                    "medical_available": shelter.medical_available,
+                    "wifi_available": shelter.wifi_available,
+                    "charging_available": shelter.charging_available,
+                    "equipment": shelter.equipment or "",
                 },
                 "photos": normalized_photos,
                 "contact": shelter.contact,
@@ -551,16 +526,14 @@ async def create_shelter(
             longitude=shelter.longitude,
             capacity=shelter.capacity,
             current_occupancy=shelter.current_occupancy,
-            attributes={
-                "pets_allowed": shelter.pets_allowed,
-                "barrier_free": shelter.barrier_free,
-                "toilet_available": shelter.toilet_available,
-                "food_available": shelter.food_available,
-                "medical_available": shelter.medical_available,
-                "wifi_available": shelter.wifi_available,
-                "charging_available": shelter.charging_available,
-                "equipment": shelter.equipment,
-            },
+            pets_allowed=shelter.attributes.get("pets_allowed", False),
+            barrier_free=shelter.attributes.get("barrier_free", False),
+            toilet_available=shelter.attributes.get("toilet_available", False),
+            food_available=shelter.attributes.get("food_available", False),
+            medical_available=shelter.attributes.get("medical_available", False),
+            wifi_available=shelter.attributes.get("wifi_available", False),
+            charging_available=shelter.attributes.get("charging_available", False),
+            equipment=shelter.attributes.get("equipment", ""),
             photos=",".join(shelter.photos) if shelter.photos else "",
             contact=shelter.contact,
             operator=shelter.operator,
@@ -583,7 +556,16 @@ async def create_shelter(
             "longitude": db_shelter.longitude,
             "capacity": db_shelter.capacity,
             "current_occupancy": db_shelter.current_occupancy,
-            "attributes": db_shelter.attributes,
+            "attributes": {
+                "pets_allowed": db_shelter.pets_allowed,
+                "barrier_free": db_shelter.barrier_free,
+                "toilet_available": db_shelter.toilet_available,
+                "food_available": db_shelter.food_available,
+                "medical_available": db_shelter.medical_available,
+                "wifi_available": db_shelter.wifi_available,
+                "charging_available": db_shelter.charging_available,
+                "equipment": db_shelter.equipment,
+            },
             "photos": db_shelter.photos.split(",") if db_shelter.photos else [],
             "contact": db_shelter.contact,
             "operator": db_shelter.operator,
@@ -618,16 +600,28 @@ async def update_shelter(
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="更新権限がありません")
         data = shelter.dict(exclude_unset=True)
-        attributes = db_shelter.attributes or {}
         for k, v in data.items():
-            if k in ["pets_allowed", "barrier_free", "toilet_available", "food_available", 
-                     "medical_available", "wifi_available", "charging_available", "equipment"]:
-                attributes[k] = v
+            if k == "attributes":
+                if "pets_allowed" in v:
+                    db_shelter.pets_allowed = v["pets_allowed"]
+                if "barrier_free" in v:
+                    db_shelter.barrier_free = v["barrier_free"]
+                if "toilet_available" in v:
+                    db_shelter.toilet_available = v["toilet_available"]
+                if "food_available" in v:
+                    db_shelter.food_available = v["food_available"]
+                if "medical_available" in v:
+                    db_shelter.medical_available = v["medical_available"]
+                if "wifi_available" in v:
+                    db_shelter.wifi_available = v["wifi_available"]
+                if "charging_available" in v:
+                    db_shelter.charging_available = v["charging_available"]
+                if "equipment" in v:
+                    db_shelter.equipment = v["equipment"]
             elif k == "photos" and v:
-                setattr(db_shelter, k, ",".join(v))
-            elif k != "attributes":
+                db_shelter.photos = ",".join(v)
+            else:
                 setattr(db_shelter, k, v)
-        db_shelter.attributes = attributes
         db_shelter.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(db_shelter)
@@ -642,7 +636,16 @@ async def update_shelter(
             "longitude": db_shelter.longitude,
             "capacity": db_shelter.capacity,
             "current_occupancy": db_shelter.current_occupancy,
-            "attributes": db_shelter.attributes,
+            "attributes": {
+                "pets_allowed": db_shelter.pets_allowed,
+                "barrier_free": db_shelter.barrier_free,
+                "toilet_available": db_shelter.toilet_available,
+                "food_available": db_shelter.food_available,
+                "medical_available": db_shelter.medical_available,
+                "wifi_available": db_shelter.wifi_available,
+                "charging_available": db_shelter.charging_available,
+                "equipment": db_shelter.equipment,
+            },
             "photos": db_shelter.photos.split(",") if db_shelter.photos else [],
             "contact": db_shelter.contact,
             "operator": db_shelter.operator,
@@ -671,7 +674,7 @@ async def delete_shelter(
             raise HTTPException(status_code=404, detail="避難所が見つかりません")
         if db_shelter.company_id != current_user.id and current_user.role != "admin":
             logger.error("Permission denied: user=%s, shelter_id=%s", current_user.email, shelter_id)
-            raise HTTPException(status_code=status.HTTP_403_FORB)
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="削除権限がありません")
         db.delete(db_shelter)
         db.commit()
         log_action(db, "delete_shelter", shelter_id, current_user.email)
@@ -710,7 +713,7 @@ async def bulk_update_shelters(
         await broadcast_shelter_update({"action": "bulk_update", "shelter_ids": request.shelter_ids})
         logger.info("Bulk update completed: %d shelters", len(shelters))
         return {"message": "避難所を一括更新しました"}
-    except Exceptionestral as e:
+    except Exception as e:
         logger.error("Error in bulk_update_shelters: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括更新に失敗しました: {str(e)}")
@@ -1023,22 +1026,18 @@ async def get_disaster_alerts():
 async def read_root(request: Request, db: Session = Depends(get_db)):
     try:
         logger.info("Rendering index.html")
-        template_path = os.path.join(TEMPLATE_DIR, "index.html")
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
-        shelters = []
-        shelters_orm = db.query(ShelterModel).all()
-        for shelter in shelters_orm:
+        shelters = db.query(ShelterModel).all()
+        shelters_data = []
+        for shelter in shelters:
             photos = shelter.photos.split(",") if shelter.photos and isinstance(shelter.photos, str) else []
             normalized_photos = []
             for photo in photos:
                 if photo and os.path.exists(os.path.join(BASE_DIR, "data", photo.lstrip("/"))):
                     normalized_photos.append(photo)
                 else:
-                    normalized_photos.append("/static/placeholder.jpg")
+                    normalized_photos.append("/static/plain")
                     logger.warning("Photo not found, using placeholder: %s", photo)
-            shelters.append({
+            shelters_data.append({
                 "id": shelter.id,
                 "name": shelter.name,
                 "address": shelter.address,
@@ -1046,15 +1045,15 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
                 "longitude": shelter.longitude,
                 "capacity": shelter.capacity,
                 "current_occupancy": shelter.current_occupancy,
-                "attributes": shelter.attributes or {
-                    "pets_allowed": shelter.pets_allowed if hasattr(shelter, "pets_allowed") else False,
-                    "barrier_free": shelter.barrier_free if hasattr(shelter, "barrier_free") else False,
-                    "toilet_available": shelter.toilet_available if hasattr(shelter, "toilet_available") else False,
-                    "food_available": shelter.food_available if hasattr(shelter, "food_available") else False,
-                    "medical_available": shelter.medical_available if hasattr(shelter, "medical_available") else False,
-                    "wifi_available": shelter.wifi_available if hasattr(shelter, "wifi_available") else False,
-                    "charging_available": shelter.charging_available if hasattr(shelter, "charging_available") else False,
-                    "equipment": shelter.equipment if hasattr(shelter, "equipment") else "",
+                "attributes": {
+                    "pets_allowed": shelter.pets_allowed,
+                    "barrier_free": shelter.barrier_free,
+                    "toilet_available": shelter.toilet_available,
+                    "food_available": shelter.food_available,
+                    "medical_available": shelter.medical_available,
+                    "wifi_available": shelter.wifi_available,
+                    "charging_available": shelter.charging_available,
+                    "equipment": shelter.equipment or "",
                 },
                 "photos": normalized_photos,
                 "contact": shelter.contact,
@@ -1070,7 +1069,7 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
             {
                 "request": request,
                 "alerts": alerts,
-                "shelters": shelters,
+                "shelters": shelters_data,
                 "api_url": "/api",
                 "ws_url": "ws://localhost:8000/ws/shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
                 "YAHOO_APPID": YAHOO_APPID,
@@ -1080,30 +1079,59 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
         logger.error("Error in read_root: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ページのレンダリングに失敗しました: {str(e)}")
 
-# 企業ダッシュボード
-@app.get("/company-dashboard", response_class=HTMLResponse)
-async def company_dashboard_page(
+# ダッシュボード（index.htmlを使用）
+@app.get("/dashboard", response_class=HTMLResponse)
+async def get_dashboard(
     request: Request,
-    current_user: CompanyModel = Depends(get_current_user),
     db: Session = Depends(get_db),
+    current_user: CompanyModel = Depends(get_current_user),
 ):
     try:
-        logger.info("Rendering company-dashboard.html for user=%s", current_user.email)
-        template_path = os.path.join(TEMPLATE_DIR, "company-dashboard.html")
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
-        shelters = db.query(ShelterModel).filter(ShelterModel.operator == current_user.name).all()
+        logger.info("Rendering dashboard for user=%s", current_user.email)
+        shelters = db.query(ShelterModel).filter(ShelterModel.company_id == current_user.id).all()
         token = request.cookies.get("token")
         if not token:
             logger.error("No token found in cookies")
             raise HTTPException(status_code=401, detail="ログインしてください")
+        shelters_data = []
+        for shelter in shelters:
+            photos = shelter.photos.split(",") if shelter.photos else []
+            normalized_photos = [
+                photo if os.path.exists(os.path.join(DATA_DIR, photo.lstrip("/"))) else "/static/plain"
+                for photo in photos
+            ]
+            shelters_data.append({
+                "id": shelter.id,
+                "name": shelter.name,
+                "address": shelter.address,
+                "latitude": shelter.latitude,
+                "longitude": shelter.longitude,
+                "capacity": shelter.capacity,
+                "current_occupancy": shelter.current_occupancy,
+                "attributes": {
+                    "pets_allowed": shelter.pets_allowed,
+                    "barrier_free": shelter.barrier_free,
+                    "toilet_available": shelter.toilet_available,
+                    "food_available": shelter.food_available,
+                    "medical_available": shelter.medical_available,
+                    "wifi_available": shelter.wifi_available,
+                    "charging_available": shelter.charging_available,
+                    "equipment": shelter.equipment or "",
+                },
+                "photos": normalized_photos,
+                "contact": shelter.contact,
+                "operator": shelter.operator,
+                "opened_at": shelter.opened_at,
+                "status": shelter.status,
+                "updated_at": shelter.updated_at,
+                "company_id": shelter.company_id,
+            })
         return templates.TemplateResponse(
-            "company-dashboard.html",
+            "index.html",
             {
                 "request": request,
                 "company": current_user,
-                "shelters": shelters,
+                "shelters": shelters_data,
                 "token": token,
                 "api_url": "/api",
                 "ws_url": "ws://localhost:8000/ws/shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
@@ -1111,7 +1139,7 @@ async def company_dashboard_page(
             },
         )
     except Exception as e:
-        logger.error("Error in company_dashboard_page: %s\n%s", str(e), traceback.format_exc())
+        logger.error("Error in get_dashboard: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ダッシュボードのレンダリングに失敗しました: {str(e)}")
 
 # ログアウト
@@ -1119,11 +1147,7 @@ async def company_dashboard_page(
 async def logout_page(request: Request):
     try:
         logger.info("Logging out")
-        template_path = os.path.join(TEMPLATE_DIR, "login.html")
-        if not os.path.exists(template_path):
-            logger.error("Template file not found: %s", template_path)
-            raise HTTPException(status_code=500, detail=f"テンプレートファイルが見つかりません: {template_path}")
-        response = templates.TemplateResponse("login.html", {"request": request})
+        response = templates.TemplateResponse("login.html", {"request": request, "error": None})
         response.delete_cookie("token")
         return response
     except Exception as e:
@@ -1151,7 +1175,7 @@ async def upload_photo_binary(
         logger.info("Photo uploaded: id=%s", photo.id)
         return {"photo_url": f"/api/photos/{photo.id}", "id": photo.id}
     except Exception as e:
-        logger.error("Error in upload_photo_binary: %s\n%s", str(e), traceback.format_enc())
+        logger.error("Error in upload_photo_binary: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"写真アップロードに失敗しました: {str(e)}")
 
@@ -1164,8 +1188,9 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         await websocket.accept()
         if not token:
             logger.error("No token provided for WebSocket")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.close(code=status.WS_1008)
             return
+
         try:
             user = await get_current_user(token, db)
             client_id = f"{user.email}_{uuid.uuid4()}"
@@ -1176,11 +1201,11 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
                 logger.debug("Received WebSocket message: %s", data)
         except JWTError as e:
             logger.error("WebSocket JWT error: %s", str(e))
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.close(code=status.WS_1008)
             return
     except Exception as e:
         logger.error("WebSocket error: %s\n%s", str(e), traceback.format_exc())
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        await websocket.close(code=status.WS_1011)
     finally:
         if client_id and client_id in connected_clients:
             del connected_clients[client_id]
