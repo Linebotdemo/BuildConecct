@@ -110,7 +110,7 @@ except Exception as e:
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 os.makedirs(STATIC_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-templates = Jinja2Templates(directory=TEMPLATE_DIR))
+templates = Jinja2Templates(directory=TEMPLATE_DIR)
 connected_clients: Dict[str, WebSocket] = {}
 
 # CORS設定
