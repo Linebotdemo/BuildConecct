@@ -99,8 +99,6 @@
     <div class="mb-4">
       <h3>避難所一覧</h3>
       <div id="shelter-list">
-        {% for s in shelters %}
-          <div class="shelter card mb-3 p-3" data-id="{{ s.id }}">
             <h4>{{ s.name }}</h4>
             <p>住所: {{ s.address }}</p>
             <p>連絡先: {{ s.contact or 'なし' }}</p>
