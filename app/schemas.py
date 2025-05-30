@@ -73,6 +73,28 @@ class CompanySchema(BaseModel):
     class Config:
         from_attributes = True
 
+class Shelter(BaseModel):
+    id: Optional[int] = None
+    name: str
+    address: str
+    latitude: float
+    longitude: float
+    capacity: int
+    current_occupancy: int
+    attributes: ShelterAttributes  # ← 修正ポイント
+    photos: List[str] = []
+    contact: Optional[str] = None
+    operator: str
+    opened_at: datetime
+    status: str
+    updated_at: Optional[datetime] = None
+    company_id: int
+
+    class Config:
+        from_attributes = True
+
+
+
 class PhotoUploadResponse(BaseModel):
     ids: List[int]
     photo_urls: List[str]
