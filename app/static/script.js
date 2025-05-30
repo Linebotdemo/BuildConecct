@@ -120,13 +120,16 @@ function updateShelterList(shelters) {
         console.log("[updateShelterList] Distance for", shelter.id, distanceText);
       }
 
-      shelter.attributes = shelter.attributes || {};
-      const tags = Object.keys(attributeLabels)
-        .filter((key) => shelter.attributes[key])
-        .map(
-          (key) =>
-            `<span class="badge bg-info me-1">${attributeLabels[key].icon} ${attributeLabels[key].label}</span>`
-        );
+const tags = Object.keys(attributeLabels)
+  .filter((key) => shelter.attributes && shelter.attributes[key])
+  .map(
+    (key) =>
+      `<span class="badge bg-info me-1">${attributeLabels[key].icon} ${attributeLabels[key].label}</span>`
+  );
+
+if (tags.length === 0) {
+  tags.push(`<span class="badge bg-secondary">属性なし</span>`);
+}
       console.log("[updateShelterList] Tags for", shelter.id, tags);
 
       return `
