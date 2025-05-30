@@ -121,12 +121,23 @@ function updateShelterList(shelters) {
       }
 
 const tags = Object.keys(attributeLabels)
-  .filter((key) => shelter.attributes && shelter.attributes[key] === true)
+  // shelter.attributes[key] が truthy（true, 1, "true" など）なら絞り込む
+  .filter((key) => shelter.attributes && shelter.attributes[key])
   .map(
     (key) =>
       `<span class="badge bg-info me-1">${attributeLabels[key].icon} ${attributeLabels[key].label}</span>`
   );
-console.log("shelter.id:", shelter.id, "attributes:", shelter.attributes, "tags:", tags);
+
+// 属性が一つもなければ「属性なし」タグを追加
+if (tags.length === 0) {
+  tags.push(`<span class="badge bg-secondary">属性なし</span>`);
+}
+
+console.log(
+  "shelter.id:", shelter.id,
+  "attributes:", shelter.attributes,
+  "tags:", tags
+);
 
 
 if (tags.length === 0) {
