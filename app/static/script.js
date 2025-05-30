@@ -121,11 +121,12 @@ function updateShelterList(shelters) {
       }
 
 const tags = Object.keys(attributeLabels)
-  .filter((key) => shelter.attributes && shelter.attributes[key]) === true)
+  .filter((key) => shelter.attributes && shelter.attributes[key] === true)
   .map(
     (key) =>
       `<span class="badge bg-info me-1">${attributeLabels[key].icon} ${attributeLabels[key].label}</span>`
   );
+
 
 if (tags.length === 0) {
   tags.push(`<span class="badge bg-secondary">属性なし</span>`);
