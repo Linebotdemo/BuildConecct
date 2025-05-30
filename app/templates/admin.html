@@ -381,29 +381,30 @@ document.getElementById('add-shelter-form').addEventListener('submit', async (e)
         }
     }
 
-    const payload = {
-        name: fd.get('name').trim(),
-        address: address,
-        latitude: latitude,
-        longitude: longitude,
-        capacity: Number(fd.get('capacity')) || 0,
-        current_occupancy: Number(fd.get('current_occupancy')) || 0,
-        attributes: {
-            pets_allowed: fd.get('pets_allowed') === 'on',
-            barrier_free: fd.get('barrier_free') === 'on',
-            toilet_available: fd.get('toilet_available') === 'on',
-            food_available: fd.get('food_available') === 'on',
-            medical_available: fd.get('medical_available') === 'on',
-            wifi_available: fd.get('wifi_available') === 'on',
-            charging_available: fd.get('charging_available') === 'on',
-            equipment: fd.get('equipment')?.trim() || null
-        },
-        photos: [],
-        contact: fd.get('contact').trim() || null,
-        operator: fd.get('operator').trim() || '自治体',
-        opened_at: fd.get('opened_at') ? new Date(fd.get('opened_at')).toISOString() : new Date().toISOString(),
-        status: fd.get('status') || 'open'
-    };
+const payload = {
+  name: fd.get('name').trim(),
+  address: address,
+  latitude: latitude,
+  longitude: longitude,
+  capacity: Number(fd.get('capacity')) || 0,
+  current_occupancy: Number(fd.get('current_occupancy')) || 0,
+  attributes: {
+    pets_allowed: document.getElementById('pets_allowed').checked,
+    barrier_free: document.getElementById('barrier_free').checked,
+    toilet_available: document.getElementById('toilet_available').checked,
+    food_available: document.getElementById('food_available').checked,
+    medical_available: document.getElementById('medical_available').checked,
+    wifi_available: document.getElementById('wifi_available').checked,
+    charging_available: document.getElementById('charging_available').checked,
+    equipment: null  // この項目は今後使う場合に備えて残してOK
+  },
+  photos: [],
+  contact: fd.get('contact').trim() || null,
+  operator: fd.get('operator').trim() || '自治体',
+  opened_at: fd.get('opened_at') ? new Date(fd.get('opened_at')).toISOString() : new Date().toISOString(),
+  status: fd.get('status') || 'open'
+};
+
     console.log('Shelter payload:', payload);
     try {
         const res = await fetch(`${apiUrl}/shelters`, {

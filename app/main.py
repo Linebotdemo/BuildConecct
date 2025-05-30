@@ -420,6 +420,14 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
         {"request": request, "companies": []},
     )
 
+@app.post("/shelters", response_model=schemas.ShelterSchema)
+def create_shelter(shelter: schemas.ShelterCreate, db: Session = Depends(get_db)):
+    new_shelter = models.ShelterModel(**shelter.dict())
+    db.add(new_shelter)
+    db.commit()
+    db.refresh(new_shelter)
+    return new_shelter
+
 # 避難所一覧取得（公開エンドポイント）
 @app.get("/api/shelters", response_model=List[ShelterSchema])
 async def get_shelters(

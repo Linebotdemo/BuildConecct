@@ -2,35 +2,33 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional, Dict
 
-class Attributes(BaseModel):
-    pets_allowed: bool = False
-    barrier_free: bool = False
-    toilet_available: bool = False
-    food_available: bool = False
-    medical_available: bool = False
-    wifi_available: bool = False
-    charging_available: bool = False
-    equipment: str = ""
+class ShelterAttributes(BaseModel):
+    pets_allowed: Optional[bool] = False
+    barrier_free: Optional[bool] = False
+    toilet_available: Optional[bool] = False
+    food_available: Optional[bool] = False
+    medical_available: Optional[bool] = False
+    wifi_available: Optional[bool] = False
+    charging_available: Optional[bool] = False
 
-class Shelter(BaseModel):
-    id: Optional[int] = None
+class ShelterCreate(BaseModel):
     name: str
     address: str
     latitude: float
     longitude: float
     capacity: int
     current_occupancy: int
-    attributes: Attributes
-    photos: List[str] = []
+    attributes: ShelterAttributes
     contact: Optional[str] = None
-    operator: str
-    opened_at: datetime
-    status: str
-    updated_at: Optional[datetime] = None
+    operator: Optional[str] = None
+    opened_at: Optional[str] = None
+    status: Optional[str] = "open"
     company_id: int
 
+class ShelterSchema(ShelterCreate):
+    id: int
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class ShelterUpdate(BaseModel):
     name: Optional[str] = None
