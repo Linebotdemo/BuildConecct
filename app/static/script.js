@@ -121,7 +121,7 @@ function updateShelterList(shelters) {
       }
 
 const tags = Object.keys(attributeLabels)
-  .filter((key) => shelter.attributes && shelter.attributes[key])
+  .filter((key) => shelter.attributes && shelter.attributes[key]) === true);
   .map(
     (key) =>
       `<span class="badge bg-info me-1">${attributeLabels[key].icon} ${attributeLabels[key].label}</span>`
