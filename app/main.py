@@ -993,7 +993,7 @@ async def proxy_endpoint(url: str):
     try:
         logger.info("Proxying request: url=%s", url)
         if "jma.go.jp" in url and "warning/00.json" in url:
-            url = "https://www.jma.go.jp/bosai/forecast/data/warning.json"
+            url = "https://www.jma.go.jp/bosai/warning/data/warning.json"
             logger.info("Redirected JMA URL to: %s", url)
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(url)

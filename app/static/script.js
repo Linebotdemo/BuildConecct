@@ -930,7 +930,7 @@ if (filterForm) {
 
   // WebSocket
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
-  const ws = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
+  let ws = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
   ws.onopen = () => console.log("[WebSocket] Connected");
   ws.onerror = (e) => console.error("[WebSocket] Error:", e);
   ws.onmessage = (e) => {
