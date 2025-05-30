@@ -912,7 +912,7 @@ document.addEventListener("DOMContentLoaded", () => {
           modalImg.src = ev.target.src;
           new bootstrap.Modal(document.getElementById("imageModal")).show();
         }
-      });
+      }
     });
   } else {
     console.error("[DOMContentLoaded] #shelter-list not found");
