@@ -126,6 +126,7 @@ const tags = Object.keys(attributeLabels)
     (key) =>
       `<span class="badge bg-info me-1">${attributeLabels[key].icon} ${attributeLabels[key].label}</span>`
   );
+console.log("shelter.id:", shelter.id, "attributes:", shelter.attributes, "tags:", tags);
 
 
 if (tags.length === 0) {
