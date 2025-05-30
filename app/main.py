@@ -1253,35 +1253,13 @@ async def upload_photo_binary(
 
 # WebSocketエンドポイント
 @app.websocket("/ws/shelters")
-async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None), db: Session = Depends(get_db)):
-    client_id = None
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
     try:
-        logger.info("WebSocket connection attempt, token=%s...", token[:10] if token else None)
-        await websocket.accept()
-        if not token:
-            logger.error("No token provided for WebSocket")
-            await websocket.close(code=1008)
-            return
-
-        try:
-            user = await get_current_user(token, db)
-            client_id = f"{user.email}_{str(uuid.uuid4())}"
-            connected_clients[client_id] = websocket
-            logger.info("WebSocket connected: id=%s, user=%s", client_id, user.email)
-            while True:
-                data = await websocket.receive_json()
-                logger.debug("Received WebSocket message: %s", data)
-        except JWTError as e:
-            logger.error("WebSocket JWT error: %s", str(e))
-            await websocket.close(code=status.WS_1008)
-            return
-    except Exception as e:
-        logger.error("WebSocket error: %s\n%s", str(e), traceback.format_exc())
-        await websocket.close(code=1011)
-    finally:
-        if client_id and client_id in connected_clients:
-            del connected_clients[client_id]
-            logger.info("WebSocket disconnected: id=%s", client_id)
+        while True:
+            await asyncio.sleep(60)  # keep-alive or dummy wait
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
 
 # ファビコン
 @app.get("/favicon.ico", response_class=Response)
