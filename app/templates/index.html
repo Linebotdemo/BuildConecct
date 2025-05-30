@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -13,8 +14,6 @@
 
   <!-- カスタム CSS -->
   <link rel="stylesheet" href="/static/style.css" />
-  <!-- ファビコン（存在しない場合はコメントアウト） -->
-  <!-- <link rel="icon" href="/static/favicon.ico" type="image/x-icon" /> -->
 </head>
 <body>
   <!-- 画像拡大用モーダル -->
@@ -35,16 +34,11 @@
     <!-- 検索 -->
     <div class="mb-4">
       <h2>避難所検索</h2>
-      <input
-        type="text"
-        id="search"
-        placeholder="避難所名、住所、キーワードで検索"
-        class="form-control"
-      />
+      <input type="text" id="search" placeholder="避難所名、住所、キーワードで検索" class="form-control"/>
     </div>
 
     <!-- 災害警報 -->
-    <div id="alert-section" class="alert-section">
+    <div id="alert-section" class="alert-section mb-4">
       <p>読み込み中…</p>
     </div>
 
@@ -53,24 +47,34 @@
       <h3>フィルタ</h3>
       <form id="filter-form" class="d-flex flex-wrap align-items-center gap-3">
         <!-- 属性チェック -->
-        {% for name, label in [
-           ['pets_allowed', 'ペット可'],
-           ['barrier_free', 'バリアフリー'],
-           ['toilet_available', 'トイレ'],
-           ['food_available', '食料提供'],
-           ['medical_available', '医療対応'],
-           ['wifi_available', 'Wi-Fi'],
-           ['charging_available', '充電設備']
-         ] %}
-          <div class="form-check form-check-inline">
-            <input class="form-check-input"
-                   type="checkbox"
-                   name="{{ name }}"
-                   id="filter-{{ name }}"
-            >
-            <label class="form-check-label" for="filter-{{ name }}">{{ label }}</label>
-          </div>
-        {% endfor %}
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="pets_allowed" id="filter-pets_allowed">
+          <label class="form-check-label" for="filter-pets_allowed">ペット可</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="barrier_free" id="filter-barrier_free">
+          <label class="form-check-label" for="filter-barrier_free">バリアフリー</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="toilet_available" id="filter-toilet_available">
+          <label class="form-check-label" for="filter-toilet_available">トイレ</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="food_available" id="filter-food_available">
+          <label class="form-check-label" for="filter-food_available">食料提供</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="medical_available" id="filter-medical_available">
+          <label class="form-check-label" for="filter-medical_available">医療対応</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="wifi_available" id="filter-wifi_available">
+          <label class="form-check-label" for="filter-wifi_available">Wi-Fi</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="charging_available" id="filter-charging_available">
+          <label class="form-check-label" for="filter-charging_available">充電設備</label>
+        </div>
 
         <!-- 状態フィルタ -->
         <div class="form-group d-flex align-items-center ms-3">
@@ -98,67 +102,7 @@
     <!-- 避難所一覧 -->
     <div class="mb-4">
       <h3>避難所一覧</h3>
-      <div id="shelter-list">
-            <h4>{{ s.name }}</h4>
-            <p>住所: {{ s.address }}</p>
-            <p>連絡先: {{ s.contact or 'なし' }}</p>
-            <p>運営団体: {{ s.operator or 'なし' }}</p>
-            <p>状態: {{ '開設中' if s.status=='open' else '閉鎖' }}</p>
-            <p>定員: {{ s.capacity }}人</p>
-            <p>現在人数: {{ s.current_occupancy }}人 ({{ (s.current_occupancy/s.capacity*100)|round(1) }}%)</p>
-            
-            <!-- 属性タグ -->
-            <div class="tags mb-2">
-              {% set attribute_labels = {
-                'pets_allowed': {'label': 'ペット可', 'icon': '🐾'},
-                'barrier_free': {'label': 'バリアフリー', 'icon': '♿'},
-                'toilet_available': {'label': 'トイレ', 'icon': '🚻'},
-                'food_available': {'label': '食料', 'icon': '🍽️'},
-                'medical_available': {'label': '医療', 'icon': '🏥'},
-                'wifi_available': {'label': 'Wi-Fi', 'icon': '📶'},
-                'charging_available': {'label': '充電', 'icon': '🔌'}
-              } %}
-              {% set has_attributes = False %}
-              {% for key, value in attribute_labels.items() %}
-                {% if s.attributes and s.attributes[key] %}
-                  <span class="badge bg-info me-1">{{ value.icon }} {{ value.label }}</span>
-                  {% set has_attributes = True %}
-                {% endif %}
-              {% endfor %}
-              {% if not has_attributes %}
-              {% endif %}
-            </div>
-
-            <div class="occupancy-bar mb-2">
-              <div class="occupancy-fill {% if s.current_occupancy/s.capacity>=0.8 %}warning{% endif %}"
-                   style="width: {{ (s.current_occupancy/s.capacity*100) }}%;"></div>
-            </div>
-
-            <canvas id="chart-{{ s.id }}" height="50"></canvas>
-
-            {% if s.photos %}
-              <div class="photo-gallery mb-2">
-                {% for photo in s.photos %}
-                  <img src="{{ photo }}"
-                       class="photo-preview me-1 rounded"
-                       style="width:100px; cursor:pointer;"
-                       alt="サムネイル">
-                {% endfor %}
-              </div>
-            {% endif %}
-
-            <button class="favorite-btn btn btn-outline-secondary me-1"
-                    onclick="toggleFavorite({{ s.id }})">
-              ☆ お気に入り登録
-            </button>
-            <a href="https://www.google.com/maps/dir/?api=1&destination={{ s.latitude }},{{ s.longitude }}"
-               target="_blank"
-               class="btn btn-outline-success">
-              ルート案内
-            </a>
-          </div>
-        {% endfor %}
-      </div>
+      <div id="shelter-list"></div>
     </div>
 
     <!-- マップ -->
@@ -172,6 +116,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- カスタムスクリプト -->
   <script src="/static/script.js" defer></script>
 </body>
 </html>
