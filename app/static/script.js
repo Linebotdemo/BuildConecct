@@ -144,7 +144,7 @@ if (tags.length === 0) {
           <p>定員: ${shelter.capacity || 0}人</p>
           <p>現在: ${shelter.current_occupancy || 0}人 (${pct.toFixed(1)}%)</p>
           ${distanceText ? `<p>距離: ${distanceText}</p>` : ""}
-          <div class="tags mb-2">${tags.length ? tags.join("") : "<span class='badge bg-secondary'>属性なし</span>"}</div>
+          <div class="tags mb-2">${tags.join("")}</div>
           <div class="occupancy-bar mb-2">
             <div class="occupancy-fill ${isWarn ? "warning" : ""}" style="width:${pct}%;"></div>
           </div>
