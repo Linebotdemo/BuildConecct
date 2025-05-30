@@ -30,6 +30,7 @@ class ShelterSchema(ShelterCreate):
     class Config:
         orm_mode = True
 
+
 class ShelterUpdate(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
