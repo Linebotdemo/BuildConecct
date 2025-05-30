@@ -369,7 +369,7 @@ async function fetchAlerts() {
   }
 
   const urlJMA = "https://www.jma.go.jp/bosai/hazard/data/warning/00.json";
-  const proxyUrl = `/proxy?url=${encodeURIComponent(urlJMA)}`;
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlJMA)}`;
   console.log("[fetchAlerts] Proxy URL:", proxyUrl);
 
   try {

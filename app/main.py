@@ -1260,7 +1260,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
         await websocket.accept()
         if not token:
             logger.error("No token provided for WebSocket")
-            await websocket.close(code=status.WS_1008)
+            await websocket.close(code=1008)
             return
 
         try:
@@ -1277,7 +1277,7 @@ async def websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(
             return
     except Exception as e:
         logger.error("WebSocket error: %s\n%s", str(e), traceback.format_exc())
-        await websocket.close(code=status.WS_1011)
+        await websocket.close(code=1011)
     finally:
         if client_id and client_id in connected_clients:
             del connected_clients[client_id]
