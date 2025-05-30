@@ -841,6 +841,7 @@ function initMap() {
       }
     };
     document.querySelector(".container").prepend(geoButton);
+    geoButton.click();
 
     // 距離フィルターの円表示
     document.getElementById("filter-distance")?.addEventListener("change", (e) => {
@@ -867,15 +868,24 @@ document.addEventListener("DOMContentLoaded", () => {
   initAdminMap();
 
   // 検索バー
-  const searchInput = document.getElementById("search");
-  if (searchInput) {
-    console.error("[DOMContentLoaded] #search not found");
-  } else {
-    searchInput.addEventListener("input", () => {
-      clearTimeout(searchInput.debounceTimer);
-      searchInput.debounceTimer = setTimeout(fetchShelters, 300);
-    });
-  }
+const searchInput = document.getElementById("search");
+if (!searchInput) {
+  console.error("[DOMContentLoaded] #search not found");
+} else {
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchInput.debounceTimer);
+    searchInput.debounceTimer = setTimeout(fetchShelters, 300);
+  });
+}
+
+const filterForm = document.getElementById("filter-form");
+if (filterForm) {
+  filterForm.addEventListener("change", () => {
+    fetchShelters();
+  });
+}
+
+
 
   // フィルター
   ["filter-status", "filter-distance"].forEach((id) => {
