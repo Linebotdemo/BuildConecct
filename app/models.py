@@ -30,6 +30,22 @@ class Shelter(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # 更新日時
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)  # 運営企業ID
 
+    @property
+    def attributes(self):
+        return {
+            "pets_allowed": self.pets_allowed,
+            "barrier_free": self.barrier_free,
+            "toilet_available": self.toilet_available,
+            "food_available": self.food_available,
+            "medical_available": self.medical_available,
+            "wifi_available": self.wifi_available,
+            "charging_available": self.charging_available,
+            "equipment": self.equipment,
+        }
+
+
+
+
     # 関連
     audit_logs = relationship("AuditLog", back_populates="shelter")
     photos_rel = relationship("Photo", secondary="shelter_photos", back_populates="shelters")
