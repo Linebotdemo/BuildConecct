@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from pydantic import ValidationError
 import httpx
 import xml.etree.ElementTree as ET
+logging.basicConfig(level=logging.DEBUG)
 from typing import List, Optional, Dict
 
 # ロギング設定
@@ -826,7 +827,8 @@ async def reverse_geocode(lat: float, lon: float):
             res = await client.get(url, params=params)
 
         logger.info("Yahoo Geocode response status: %s", res.status_code)
-        logger.debug("Yahoo API full response body: %s", res.text)  # ←★追加★
+        logger.info("Yahoo API full response body: %s", res.text)  # ← 一時的にdebug→info
+
 
         if res.status_code != 200:
             raise HTTPException(status_code=502, detail="Yahoo API エラー")
