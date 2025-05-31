@@ -824,17 +824,14 @@ async def reverse_geocode(lat: float, lon: float):
         }
         async with httpx.AsyncClient() as client:
             res = await client.get(url, params=params)
-        
-        # ★★ ここを追加 ★★
-        logger.debug("Yahoo API raw response: %s", res.text)
+
+        logger.info("Yahoo Geocode response status: %s", res.status_code)
+        logger.debug("Yahoo API full response body: %s", res.text)  # ←★追加★
 
         if res.status_code != 200:
-            logger.info("Yahoo Geocode response status: %s", res.status_code)
             raise HTTPException(status_code=502, detail="Yahoo API エラー")
 
         data = res.json()
-
-        # 念のため構造確認
         logger.debug("Parsed JSON: %s", data)
 
         prefecture = data["Feature"][0]["Property"]["AddressElement"][0]["Name"]
@@ -842,6 +839,7 @@ async def reverse_geocode(lat: float, lon: float):
     except Exception as e:
         logger.error("Reverse geocode error: %s", str(e))
         raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
+
 
 
 
