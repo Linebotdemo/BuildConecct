@@ -397,15 +397,16 @@ const payload = {
     medical_available: document.getElementById('medical_available').checked,
     wifi_available: document.getElementById('wifi_available').checked,
     charging_available: document.getElementById('charging_available').checked,
-    equipment: null  // この項目は今後使う場合に備えて残してOK
+    equipment: null
   },
   photos: [],
   contact: fd.get('contact').trim() || null,
   operator: fd.get('operator').trim() || '自治体',
   opened_at: fd.get('opened_at') ? new Date(fd.get('opened_at')).toISOString() : new Date().toISOString(),
-  status: fd.get('status') || 'open'
-  company_id: companyId
+  status: fd.get('status') || 'open',  // ✅ カンマ追加！
+  company_id: companyId                // ✅ OK
 };
+
 
     console.log('Shelter payload:', payload);
     try {
