@@ -8,6 +8,8 @@ from starlette.websockets import WebSocketDisconnect
 import logging
 import traceback
 from datetime import datetime, timedelta
+import schemas
+
 from fastapi import (
     FastAPI,
     Depends,
