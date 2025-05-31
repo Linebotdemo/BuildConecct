@@ -831,37 +831,30 @@ async def bulk_delete_shelters(
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
 @app.get("/api/reverse-geocode")
-async def reverse_geocode(lat: float, lon: float):
+async def reverse_geocode_endpoint(lat: float, lon: float):
     try:
-        logger.info("Reverse geocoding: lat=%s, lon=%s", lat, lon)
-        url = "https://nominatim.openstreetmap.org/reverse"
+        logger.info("Reverse geocoding lat=%.6f, lon=%.6f", lat, lon)
+        url = "https://map.yahooapis.jp/geoapi/V1/reverseGeoCoder"
         params = {
+            "appid": YAHOO_APPID,
             "lat": lat,
             "lon": lon,
-            "format": "json",
-            "accept-language": "ja"
+            "output": "json",
         }
-        async with httpx.AsyncClient(headers={"User-Agent": "SmartShelter/1.0"}) as client:
-            res = await client.get(url, params=params)
-        res.raise_for_status()
-
-        data = res.json()
-        logger.info("Nominatim raw response: %s", data)  # ← ★ これを追加
-
-        address = data.get("address", {})
-        logger.info("Nominatim address fields: %s", list(address.keys()))  # ← ★ これも追加
-
-        # fallback含めて強化
-        prefecture = address.get("state") or address.get("region") or address.get("province") or address.get("county")
-        if not prefecture:
-            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
-        logger.info("Reverse geocode result: %s", prefecture)
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, params=params)
+        logger.info("Yahoo reverse status: %d", resp.status_code)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail="Yahoo API エラー")
+        data = resp.json()
+        if "Feature" not in data or not data["Feature"]:
+            raise HTTPException(status_code=404, detail="都道府県情報が見つかりません")
+        prefecture = data["Feature"][0]["Property"].get("Prefecture")
+        logger.info("Extracted prefecture: %s", prefecture)
         return {"prefecture": prefecture}
     except Exception as e:
-        logger.error("Reverse geocode error: %s", str(e))
+        logger.error("Reverse geocode failed: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
-
-
 
 
 
