@@ -1158,30 +1158,49 @@ def get_area_bounds(area: str):
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        logger.info(f"[DEBUG] 受信した緯度経度: lat={lat}, lon={lon}")
+        logger.info(f"[DISASTER ALERT] 受信緯度経度: lat={lat}, lon={lon}")
+
+        # --- 逆ジオコーディング ---
         geocode_res = await reverse_geocode(lat, lon)
+        logger.info(f"[DISASTER ALERT] 逆ジオ結果: {geocode_res}")
+
         if not geocode_res or "prefecture" not in geocode_res:
-            raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
+            raise HTTPException(status_code=500, detail="逆ジオコーディング失敗: prefectureなし")
 
         pref_name = geocode_res["prefecture"]
+        logger.info(f"[DISASTER ALERT] 都道府県名: {pref_name}")
+
         pref_code = PREF_CODE_MAP.get(pref_name)
         if not pref_code:
-            raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりませんでした: {pref_name}")
+            logger.warning(f"[DISASTER ALERT] PREF_CODE_MAP に {pref_name} が存在しない")
+            raise HTTPException(status_code=404, detail=f"都道府県コード未定義: {pref_name}")
 
+        # --- JMA URL構築 ---
         jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{pref_code}.json"
+        logger.info(f"[DISASTER ALERT] JMA リクエストURL: {jma_url}")
+
         async with httpx.AsyncClient() as client:
             jma_res = await client.get(jma_url, timeout=10)
+            logger.info(f"[DISASTER ALERT] JMA ステータス: {jma_res.status_code}")
             jma_res.raise_for_status()
             jma_data = jma_res.json()
 
-        # ✅ 必要な情報だけ抽出して alerts: [] 形式に変換
+        logger.info(f"[DISASTER ALERT] JMAデータ取得成功: keys = {list(jma_data.keys())}")
+
         alerts = jma_data.get("areaTypes", [])
-        return {"alerts": alerts}  # ← フロントエンドの仕様と一致させる！
+        if not isinstance(alerts, list):
+            logger.error(f"[DISASTER ALERT] areaTypes が list でない: {type(alerts)}")
+            raise HTTPException(status_code=500, detail="JMAデータ形式エラー")
 
+        logger.info(f"[DISASTER ALERT] 取得した alerts 件数: {len(alerts)}")
+        return {"alerts": alerts}
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"[DISASTER ALERT] JMA API HTTPエラー: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail="JMA API HTTPエラー")
     except Exception as e:
-        logger.error(f"[ERROR] 災害アラート取得エラー: {e}")
+        logger.exception(f"[DISASTER ALERT] 処理中エラー")
         raise HTTPException(status_code=500, detail="災害アラート取得エラー")
-
 
 
 
