@@ -1139,7 +1139,7 @@ def fetch_weather_alerts():
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump({"timestamp": datetime.utcnow().isoformat(), "alerts": alerts}, f, ensure_ascii=False)
         logger.info("Fetched and cached %d weather alerts", len(alerts))
-        return alerts
+        return {"alerts": alerts}
     except Exception as e:
         logger.error("Error in fetch_weather_alerts: %s\n%s", str(e), traceback.format_exc())
         if os.path.exists(cache_file):
