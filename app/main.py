@@ -811,6 +811,29 @@ async def bulk_delete_shelters(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
+@app.get("/api/reverse-geocode")
+async def reverse_geocode(lat: float, lon: float):
+    try:
+        logger.info("Reverse geocoding: lat=%s, lon=%s", lat, lon)
+        url = "https://map.yahooapis.jp/geo/V1/reverseGeoCoder"
+        params = {
+            "appid": YAHOO_APPID,
+            "lat": lat,
+            "lon": lon,
+            "output": "json"
+        }
+        async with httpx.AsyncClient() as client:
+            res = await client.get(url, params=params)
+        if res.status_code != 200:
+            raise HTTPException(status_code=502, detail="Yahoo API エラー")
+        data = res.json()
+        prefecture = data["Feature"][0]["Property"]["AddressElement"][0]["Name"]
+        return {"prefecture": prefecture}
+    except Exception as e:
+        logger.error("Reverse geocode error: %s", str(e))
+        raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
+
+
 # 写真アップロード（単一、認証必要）
 @app.post("/api/shelters/upload-photo", response_model=PhotoUploadResponse)
 async def upload_photo(

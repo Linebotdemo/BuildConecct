@@ -119,5 +119,48 @@
 
   <!-- カスタムスクリプト -->
   <script src="/static/script.js" defer></script>
+<script>
+  // ページ読み込み時に現在地を取得して警報をチェック
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!navigator.geolocation) {
+      alert("このブラウザは位置情報に対応していません");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      console.log("現在地:", lat, lon);
+
+      try {
+        // 都道府県名を取得
+        const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
+        const { prefecture } = await res.json();
+        console.log("都道府県名:", prefecture);
+
+        // 全警報を取得
+        const alertsRes = await fetch("/api/disaster-alerts");
+        const alerts = await alertsRes.json();
+
+        // 該当する都道府県の警報だけ抽出
+        const matched = alerts.filter(a => a.area === prefecture);
+        console.log("該当地域の警報:", matched);
+
+        // アラート表示
+        if (matched.length > 0) {
+          alert(`${prefecture} の警報: ${matched.map(a => a.warning_type).join(", ")}`);
+        } else {
+          alert(`${prefecture} に警報は出ていません`);
+        }
+      } catch (error) {
+        console.error("警報取得中にエラー:", error);
+        alert("現在地の警報取得に失敗しました");
+      }
+    }, (err) => {
+      alert("現在地の取得に失敗しました: " + err.message);
+    });
+  });
+</script>
+
 </body>
 </html>
