@@ -1022,6 +1022,9 @@ async def get_audit_logs(db: Session = Depends(get_db), current_user: CompanyMod
 # ジオコーディング
 @app.get("/api/geocode")
 async def geocode_address_endpoint(address: str):
+    if not YAHOO_APPID:
+        raise HTTPException(status_code=500, detail="Yahoo APIのAPPIDが設定されていません")
+
     try:
         logger.info("Geocoding address: %s", address)
         url = "https://map.yahooapis.jp/geocode/V1/geoCoder"
@@ -1030,25 +1033,31 @@ async def geocode_address_endpoint(address: str):
             "query": address,
             "output": "json",
         }
+
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, params=params)
         logger.info("Yahoo Geocode status: %d", resp.status_code)
+
         if resp.status_code != 200:
             logger.error("Yahoo API error: HTTP %d", resp.status_code)
             raise HTTPException(status_code=502, detail=f"Yahoo API エラー: HTTP {resp.status_code}")
+
         data = resp.json()
         if not data.get("Feature"):
             msg = data.get("Error", [{"Message": "住所が見つかりません"}])[0]["Message"]
             logger.error("Geocode failed: %s", msg)
             raise HTTPException(status_code=404, detail=f"ジオコーディング失敗: {msg}")
+
         feature = data["Feature"][0]
         coordinates = feature.get("Geometry", {}).get("Coordinates")
         if not coordinates:
             logger.error("Coordinates not found in response")
             raise HTTPException(status_code=400, detail="無効なジオコードレスポンス形式")
+
         lon, lat = map(float, coordinates.split(","))
         logger.info("Geocoded: lat=%f, lon=%f", lat, lon)
         return {"lat": lat, "lon": lon}
+
     except Exception as e:
         logger.error("Error in geocode: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ジオコーディングに失敗しました: {str(e)}")
