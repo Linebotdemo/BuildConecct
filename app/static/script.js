@@ -841,7 +841,6 @@ function initMap() {
 
 async function fetchDisasterAlerts(lat, lon) {
   try {
-    // 都道府県名を取得（FastAPI経由で Nominatim または Yahoo API 使用）
     const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
     const data = await res.json();
 
@@ -850,28 +849,31 @@ async function fetchDisasterAlerts(lat, lon) {
       console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
       return;
     }
-    console.log("[都道府県名]", prefecture);
+    console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
 
-    // 警報データ取得
     const alertRes = await fetch(`/api/disaster-alerts`);
     const alertData = await alertRes.json();
 
-    const relevantAlerts = alertData.alerts.filter(alert =>
+    const alerts = alertData.alerts;
+    if (!Array.isArray(alerts)) {
+      console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
+      return;
+    }
+
+    const relevantAlerts = alerts.filter(alert =>
       alert.area.includes(prefecture)
     );
 
     if (relevantAlerts.length === 0) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
     } else {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
-
-      // ✅ 表示する方法は必要に応じて変更可能
       alert(`【警報あり】${prefecture}\n` + relevantAlerts.map(a => `・${a.type}：${a.level}`).join("\n"));
     }
   } catch (err) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
+
 
 
 
@@ -894,6 +896,7 @@ async function fetchDisasterAlerts(lat, lon) {
             console.log("[initMap] User location:", userLocation);
             fetchShelters();
             fetchAlerts();
+            fetchDisasterAlerts(userLocation[0], userLocation[1]);
           },
           (error) => {
             console.warn("[initMap] Geolocation error:", error.message);
