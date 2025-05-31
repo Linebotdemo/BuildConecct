@@ -9,7 +9,6 @@ import logging
 import traceback
 from datetime import datetime, timedelta
 import schemas
-
 from fastapi import (
     FastAPI,
     Depends,
@@ -72,6 +71,7 @@ from schemas import (
 
 # --- 企業周りのRouter ---
 from utils import router as company_router
+
 
 # FastAPI アプリケーション
 app = FastAPI(title="SafeShelter API", version="1.0.0")
@@ -1166,7 +1166,7 @@ async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
         if geocode_res is None:
             raise HTTPException(status_code=502, detail="逆ジオコーディング失敗")
         
-        pref_name = geocode_res
+        pref_name = geocode_res.get("prefecture")
         print(f"[DEBUG] 取得した都道府県名: {pref_name}")
 
         pref_code = PREF_CODE_MAP.get(pref_name)
