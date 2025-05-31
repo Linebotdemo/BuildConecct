@@ -10,6 +10,7 @@ class ShelterAttributes(BaseModel):
     medical_available: Optional[bool] = False
     wifi_available: Optional[bool] = False
     charging_available: Optional[bool] = False
+    equipment: Optional[str] = None
 
 class ShelterCreate(BaseModel):
     name: str
