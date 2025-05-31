@@ -1158,32 +1158,42 @@ def get_area_bounds(area: str):
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        # 逆ジオコーディングして都道府県名取得
+        print(f"[DEBUG] 受信した緯度経度: lat={lat}, lon={lon}")
+
         geocode_res = await reverse_geocode(lat, lon)
+        print(f"[DEBUG] 逆ジオコーディング結果: {geocode_res}")
+
         if geocode_res is None:
             raise HTTPException(status_code=502, detail="逆ジオコーディング失敗")
         
         pref_name = geocode_res
+        print(f"[DEBUG] 取得した都道府県名: {pref_name}")
+
         pref_code = PREF_CODE_MAP.get(pref_name)
+        print(f"[DEBUG] PREF_CODE_MAP結果: {pref_code}")
 
         if not pref_code:
             raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりませんでした: {pref_name}")
 
-        # 気象庁APIから警報情報取得
+        jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{pref_code}.json"
+        print(f"[DEBUG] JMAリクエストURL: {jma_url}")
+
         async with httpx.AsyncClient() as client:
-            jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{pref_code}.json"
             jma_res = await client.get(jma_url, timeout=10)
+            print(f"[DEBUG] JMAステータス: {jma_res.status_code}")
             jma_res.raise_for_status()
             jma_data = jma_res.json()
 
+        print(f"[DEBUG] JMAデータ取得成功")
         return jma_data
 
     except httpx.HTTPStatusError as e:
-        logging.error(f"JMAエラー: {e}")
+        print(f"[ERROR] JMAエラー: {e}")
         raise HTTPException(status_code=e.response.status_code, detail=f"JMA APIエラー: {e.response.status_code}")
     except Exception as e:
-        logging.error(f"災害アラート取得エラー: {e}")
+        print(f"[ERROR] 災害アラート取得エラー: {e}")
         raise HTTPException(status_code=500, detail="災害アラート取得エラー")
+
 
 # ルートページ
 @app.get("/", response_class=HTMLResponse)
