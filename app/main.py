@@ -1155,46 +1155,40 @@ def get_area_bounds(area: str):
         "神奈川県": [[35.1, 139.0], [35.6, 139.7]],
     }
     return bounds.get(area, [[35.6762, 139.6503], [35.6762, 139.6503]])
-
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        print(f"[DEBUG] 受信した緯度経度: lat={lat}, lon={lon}")
+        print(f"[DEBUG] 緯度経度: lat={lat}, lon={lon}")
 
+        # 逆ジオコーディングで都道府県取得
         geocode_res = await reverse_geocode(lat, lon)
-        print(f"[DEBUG] 逆ジオコーディング結果: {geocode_res}")
+        prefecture = geocode_res.get("prefecture")
+        print(f"[DEBUG] 都道府県名: {prefecture}")
 
-        if geocode_res is None:
-            raise HTTPException(status_code=502, detail="逆ジオコーディング失敗")
-        
-        pref_name = geocode_res.get("prefecture")
-        print(f"[DEBUG] 取得した都道府県名: {pref_name}")
-
-        pref_code = PREF_CODE_MAP.get(pref_name)
-        print(f"[DEBUG] PREF_CODE_MAP結果: {pref_code}")
-
+        pref_code = PREF_CODE_MAP.get(prefecture)
         if not pref_code:
-            raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりませんでした: {pref_name}")
+            raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりません: {prefecture}")
 
         jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{pref_code}.json"
-        print(f"[DEBUG] JMAリクエストURL: {jma_url}")
+        print(f"[DEBUG] JMA URL: {jma_url}")
 
         async with httpx.AsyncClient() as client:
-            jma_res = await client.get(jma_url, timeout=10)
-            print(f"[DEBUG] JMAステータス: {jma_res.status_code}")
-            jma_res.raise_for_status()
-            jma_data = jma_res.json()
+            res = await client.get(jma_url, timeout=10)
+            res.raise_for_status()
+            jma_data = res.json()
 
-        print(f"[DEBUG] JMAデータ取得成功")
-        return JSONResponse(content={"alerts": jma_data.get("areaTypes", [])})
-
+        # areaTypesだけ抽出して alerts として返却
+        alerts = jma_data.get("areaTypes", [])
+        print(f"[DEBUG] 警報数: {len(alerts)}")
+        return {"alerts": alerts}
 
     except httpx.HTTPStatusError as e:
         print(f"[ERROR] JMAエラー: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=f"JMA APIエラー: {e.response.status_code}")
+        raise HTTPException(status_code=e.response.status_code, detail="JMA API エラー")
     except Exception as e:
-        print(f"[ERROR] 災害アラート取得エラー: {e}")
+        print(f"[ERROR] 全体エラー: {e}")
         raise HTTPException(status_code=500, detail="災害アラート取得エラー")
+
 
 
 # ルートページ

@@ -882,57 +882,46 @@ function initMap() {
 
 async function fetchDisasterAlerts(lat, lon) {
   try {
-    // 逆ジオコーディングして都道府県名を取得（デバッグ目的）
     const geoRes = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
     const geoData = await geoRes.json();
-
     const prefecture = geoData.prefecture;
+
     if (!prefecture) {
       console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
-    } else {
-      console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
+      return;
     }
+    console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
 
-    // ✅ FastAPI に lat/lon を渡して災害アラートを取得
     const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
-    if (!alertRes.ok) {
-      throw new Error(`HTTP error! status: ${alertRes.status}`);
+    if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
+    const alertData = await alertRes.json();
+
+    const alerts = alertData.alerts;
+    if (!Array.isArray(alerts)) {
+      console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
+      return;
     }
 
-const alertData = await alertRes.json();
-console.log("[fetchDisasterAlerts] 取得データ:", alertData);
+    const relevantAlerts = alerts.filter(alert =>
+      alert.areas?.some(area => area.name.includes(prefecture))
+    );
 
-// areaTypes → areas[] → warnings[] にアクセス
-const allWarnings = [];
-
-if (Array.isArray(alertData.areaTypes)) {
-  for (const areaType of alertData.areaTypes) {
-    for (const area of areaType.areas || []) {
-      for (const warning of area.warnings || []) {
-        allWarnings.push({
-          area: area.name,
-          type: warning.name,
-          level: warning.status
-        });
-      }
+    if (relevantAlerts.length === 0) {
+      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
+    } else {
+      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
+      alert(
+        `【警報あり】${prefecture}\n` +
+        relevantAlerts.map(a =>
+          `・${a.kind?.name}：${a.infos?.map(info => info.status).join("、")}`
+        ).join("\n")
+      );
     }
-  }
-}
-
-if (allWarnings.length === 0) {
-  console.log(`[fetchDisasterAlerts] ${prefecture} に警報はありません`);
-} else {
-  console.log(`[fetchDisasterAlerts] ${prefecture} の警報`, allWarnings);
-  alert(
-    `【警報あり】${prefecture}\n` +
-    allWarnings.map(w => `・${w.area}：${w.type}（${w.level}）`).join("\n")
-  );
-}
-
   } catch (err) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
+
 
 
 
