@@ -832,10 +832,10 @@ async def reverse_geocode(lat: float, lon: float):
 
         data = res.json()
 
-        # ★ レスポンス構造をログ出力（重要）
-        logger.info("Yahoo Geocode raw JSON: %s", json.dumps(data, ensure_ascii=False))
+        # ★★★ JSON全体を安全に表示 ★★★
+        logger.info("Yahoo Geocode raw response:\n%s", json.dumps(data, ensure_ascii=False, indent=2))
 
-        # Prefecture 抽出（ここでエラーが起きるならログで原因特定できる）
+        # 仮にFeatureキーがないなどのエラーならここで止まる
         prefecture = data["Feature"][0]["Property"]["AddressElement"][0]["Name"]
         return {"prefecture": prefecture}
 
