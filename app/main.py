@@ -1071,7 +1071,7 @@ async def proxy_endpoint(url: str):
         logger.error("Proxy HTTP error: %s, status=%d", str(e), e.response.status_code)
         if e.response.status_code in (404, 405):
             logger.warning("Returning empty areas for JMA error: %d", e.response.status_code)
-            return JSONResponse(content={"alerts": jma_data.get("areaTypes", [])})
+            return JSONResponse(content={"alerts": []})
         raise HTTPException(status_code=e.response.status_code, detail=f"Proxy error: {str(e)}")
     except Exception as e:
         logger.error("Error in proxy: %s\n%s", str(e), traceback.format_exc())
