@@ -882,23 +882,26 @@ function initMap() {
 
 async function fetchDisasterAlerts(lat, lon) {
   try {
-    const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
-    const data = await res.json();
+    // 逆ジオコーディングして都道府県名を取得（デバッグ目的）
+    const geoRes = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
+    const geoData = await geoRes.json();
 
-    const prefecture = data.prefecture;
+    const prefecture = geoData.prefecture;
     if (!prefecture) {
       console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
-      return;
+    } else {
+      console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
     }
-    console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
 
-    // ✅ 都道府県をクエリとして送信
-    const alertRes = await fetch(`/api/disaster-alerts?prefecture=${encodeURIComponent(prefecture)}`);
+    // ✅ FastAPI に lat/lon を渡して災害アラートを取得
+    const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
     if (!alertRes.ok) {
       throw new Error(`HTTP error! status: ${alertRes.status}`);
     }
 
-    const alerts = await alertRes.json();
+    const alertData = await alertRes.json();
+    const alerts = alertData.alerts || alertData; // alerts プロパティがなければそのまま扱う
+
     if (!Array.isArray(alerts)) {
       console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
       return;
@@ -921,6 +924,7 @@ async function fetchDisasterAlerts(lat, lon) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
+
 
 
 
