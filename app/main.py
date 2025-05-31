@@ -6,6 +6,7 @@ import io
 import asyncio
 from starlette.websockets import WebSocketDisconnect
 import logging
+from fastapi.responses import JSONResponse
 import traceback
 from datetime import datetime, timedelta
 import schemas
@@ -1185,7 +1186,8 @@ async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
             jma_data = jma_res.json()
 
         print(f"[DEBUG] JMAデータ取得成功")
-        return jma_data
+        return JSONResponse(content={"alerts": jma_data.get("areaTypes", [])})
+
 
     except httpx.HTTPStatusError as e:
         print(f"[ERROR] JMAエラー: {e}")
