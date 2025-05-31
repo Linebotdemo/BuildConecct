@@ -824,14 +824,25 @@ async def reverse_geocode(lat: float, lon: float):
         }
         async with httpx.AsyncClient() as client:
             res = await client.get(url, params=params)
+
+        logger.info("Yahoo Geocode response status: %d", res.status_code)
+
         if res.status_code != 200:
             raise HTTPException(status_code=502, detail="Yahoo API エラー")
+
         data = res.json()
+
+        # ★ レスポンス構造をログ出力（重要）
+        logger.info("Yahoo Geocode raw JSON: %s", json.dumps(data, ensure_ascii=False))
+
+        # Prefecture 抽出（ここでエラーが起きるならログで原因特定できる）
         prefecture = data["Feature"][0]["Property"]["AddressElement"][0]["Name"]
         return {"prefecture": prefecture}
+
     except Exception as e:
         logger.error("Reverse geocode error: %s", str(e))
         raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
+
 
 
 # 写真アップロード（単一、認証必要）
