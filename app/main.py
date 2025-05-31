@@ -831,31 +831,32 @@ async def bulk_delete_shelters(
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
 @app.get("/api/reverse-geocode")
-async def reverse_geocode_endpoint(lat: float, lon: float):
+async def reverse_geocode(lat: float = Query(...), lon: float = Query(...)):
     try:
-        logger.info("Reverse geocoding lat=%.6f, lon=%.6f", lat, lon)
-        url = "https://map.yahooapis.jp/geoapi/V1/reverseGeoCoder"
+        logger.info("Reverse geocoding: lat=%s, lon=%s", lat, lon)
+        url = "https://nominatim.openstreetmap.org/reverse"
         params = {
-            "appid": YAHOO_APPID,  # ← .env に定義必須！
             "lat": lat,
             "lon": lon,
-            "output": "json",
+            "format": "json",
+            "accept-language": "ja"
         }
+        headers = {"User-Agent": "SafeShelter/1.0"}
+
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, params=params)
-        logger.info("Yahoo reverse status: %d", resp.status_code)
-        if resp.status_code != 200:
-            raise HTTPException(status_code=resp.status_code, detail="Yahoo API エラー")
-        data = resp.json()
-        if "Feature" not in data or not data["Feature"]:
-            raise HTTPException(status_code=404, detail="都道府県情報が見つかりません")
-        prefecture = data["Feature"][0]["Property"].get("Prefecture")
-        logger.info("Extracted prefecture: %s", prefecture)
+            res = await client.get(url, params=params, headers=headers)
+        res.raise_for_status()
+
+        data = res.json()
+        address = data.get("address", {})
+        prefecture = address.get("state") or address.get("region") or address.get("province")
+        if not prefecture:
+            raise HTTPException(status_code=404, detail="都道府県が見つかりませんでした")
+        logger.info("Reverse geocode result: %s", prefecture)
         return {"prefecture": prefecture}
     except Exception as e:
-        logger.error("Reverse geocode failed: %s\n%s", str(e), traceback.format_exc())
+        logger.error("逆ジオコーディング失敗: %s", str(e))
         raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
-
 
 
 
