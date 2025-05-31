@@ -816,27 +816,23 @@ async def bulk_delete_shelters(
 async def reverse_geocode(lat: float, lon: float):
     try:
         logger.info("Reverse geocoding: lat=%s, lon=%s", lat, lon)
-        url = "https://map.yahooapis.jp/geo/V1/reverseGeoCoder"
+        url = "https://nominatim.openstreetmap.org/reverse"
         params = {
-            "appid": YAHOO_APPID,
             "lat": lat,
             "lon": lon,
-            "output": "json"
+            "format": "json",
+            "accept-language": "ja"
         }
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(headers={"User-Agent": "SmartShelter/1.0"}) as client:
             res = await client.get(url, params=params)
-
-        logger.info("Yahoo Geocode response status: %s", res.status_code)
-        logger.info("Yahoo API full response body: %s", res.text)  # ← 一時的にdebug→info
-
-
         if res.status_code != 200:
-            raise HTTPException(status_code=502, detail="Yahoo API エラー")
-
+            raise HTTPException(status_code=502, detail="Reverse geocode API error")
         data = res.json()
-        logger.debug("Parsed JSON: %s", data)
-
-        prefecture = data["Feature"][0]["Property"]["AddressElement"][0]["Name"]
+        address = data.get("address", {})
+        prefecture = address.get("state", None)
+        if not prefecture:
+            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
+        logger.info("Reverse geocode result: %s", prefecture)
         return {"prefecture": prefecture}
     except Exception as e:
         logger.error("Reverse geocode error: %s", str(e))
