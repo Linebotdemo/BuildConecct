@@ -895,15 +895,16 @@ async function fetchDisasterAlerts(lat, lon) {
     const alertRes = await fetch(`/api/disaster-alerts`);
     const alertData = await alertRes.json();
 
-    const alerts = alertData.alerts;
-    if (!Array.isArray(alerts)) {
-      console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
-      return;
-    }
+const alerts = await alertRes.json();  // JSONが配列そのもの
+if (!Array.isArray(alerts)) {
+  console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
+  return;
+}
 
-    const relevantAlerts = alerts.filter(alert =>
-      alert.area.includes(prefecture)
-    );
+const relevantAlerts = alerts.filter(alert =>
+  alert.area.includes(prefecture)
+);
+
 
     if (relevantAlerts.length === 0) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
