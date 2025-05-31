@@ -250,6 +250,7 @@
     const apiUrl = "{{ api_url }}"; // API ベース URL
     const wsUrl = "{{ ws_url }}"; // WebSocket URL
     const yahooAppId = "{{ YAHOO_APPID }}"; // Yahoo API ID
+    const companyId = {{ company.id }};
   </script>
 
   <!-- カスタムスクリプト -->
@@ -403,6 +404,7 @@ const payload = {
   operator: fd.get('operator').trim() || '自治体',
   opened_at: fd.get('opened_at') ? new Date(fd.get('opened_at')).toISOString() : new Date().toISOString(),
   status: fd.get('status') || 'open'
+  company_id: companyId
 };
 
     console.log('Shelter payload:', payload);
