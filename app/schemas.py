@@ -67,7 +67,7 @@ class CompanySchema(BaseModel):
     id: Optional[int] = None
     email: str
     name: str
-    hashed_password: str
+    hashed_pw: str = Field(..., alias="hashed_password")
     role: str
     created_at: datetime
 

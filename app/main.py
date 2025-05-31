@@ -150,7 +150,7 @@ async def on_startup():
                 admin = CompanyModel(
                     email="admin@example.com",
                     name="管理者",
-                    hashed_password=hashed_pw,
+                    hashed_pw=hashed_pw,
                     role="admin",
                     created_at=datetime.utcnow(),
                 )
@@ -238,7 +238,7 @@ async def create_company_access_token(
 ):
     logger.info("Token request: username=%s", form_data.username)
     company = db.query(CompanyModel).filter(CompanyModel.email == form_data.username).first()
-    if not company or not pwd_context.verify(form_data.password, company.hashed_password):
+    if not company or not pwd_context.verify(form_data.password, company.hashed_pw):
         logger.error("Authentication failed for username: %s", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -314,7 +314,7 @@ async def login_post(
     try:
         logger.info("Login attempt: username=%s", username)
         company = db.query(CompanyModel).filter(CompanyModel.email == username).first()
-        if not company or not pwd_context.verify(password, company.hashed_password):
+        if not company or not pwd_context.verify(password, company.hashed_pw):
             logger.error("Login failed: username=%s", username)
             return templates.TemplateResponse(
                 "login.html",

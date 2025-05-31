@@ -51,7 +51,6 @@ def create_company(company: CompanySchema, db: Session = Depends(get_db)):
         db_company = CompanyModel(
             name=company.name,
             email=company.email,
-            hashed_pw=pwd_ctx.hash(company.password),
             role=company.role
         )
         db.add(db_company)
