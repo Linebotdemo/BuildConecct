@@ -833,7 +833,7 @@ async def bulk_delete_shelters(
 async def reverse_geocode(lat: float, lon: float):
     try:
         logger.info("Reverse geocoding: lat=%s, lon=%s", lat, lon)
-        url = "https://nominatim.openstreetmap.org/reverse"
+        url = "https://geocode.maps.co/reverse"
         params = {
             "lat": lat,
             "lon": lon,
