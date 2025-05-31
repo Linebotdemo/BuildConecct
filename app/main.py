@@ -138,6 +138,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/company-token")
 # HTTP クライアント
 http_client = httpx.AsyncClient(timeout=10.0)
 
+# --- 都道府県 → コード辞書 ---
+PREF_CODE_MAP = {
+    "北海道": "01", "青森県": "02", "岩手県": "03", "宮城県": "04", "秋田県": "05", "山形県": "06",
+    "福島県": "07", "茨城県": "08", "栃木県": "09", "群馬県": "10", "埼玉県": "11", "千葉県": "12",
+    "東京都": "13", "神奈川県": "14", "新潟県": "15", "富山県": "16", "石川県": "17", "福井県": "18",
+    "山梨県": "19", "長野県": "20", "岐阜県": "21", "静岡県": "22", "愛知県": "23", "三重県": "24",
+    "滋賀県": "25", "京都府": "26", "大阪府": "27", "兵庫県": "28", "奈良県": "29", "和歌山県": "30",
+    "鳥取県": "31", "島根県": "32", "岡山県": "33", "広島県": "34", "山口県": "35", "徳島県": "36",
+    "香川県": "37", "愛媛県": "38", "高知県": "39", "福岡県": "40", "佐賀県": "41", "長崎県": "42",
+    "熊本県": "43", "大分県": "44", "宮崎県": "45", "鹿児島県": "46", "沖縄県": "47"
+}
+
+
+
+
+
 # スタートアップイベント
 @app.on_event("startup")
 async def on_startup():
@@ -1139,14 +1155,34 @@ def get_area_bounds(area: str):
     return bounds.get(area, [[35.6762, 139.6503], [35.6762, 139.6503]])
 
 @app.get("/api/disaster-alerts")
-async def get_disaster_alerts():
+async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        alerts = fetch_weather_alerts()
-        logger.info("Returning %d disaster alerts", len(alerts))
-        return alerts
+        # 逆ジオコーディングして都道府県名取得
+        geocode_res = await reverse_geocode(lat, lon)
+        if geocode_res is None:
+            raise HTTPException(status_code=502, detail="逆ジオコーディング失敗")
+        
+        pref_name = geocode_res
+        pref_code = PREF_CODE_MAP.get(pref_name)
+
+        if not pref_code:
+            raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりませんでした: {pref_name}")
+
+        # 気象庁APIから警報情報取得
+        async with httpx.AsyncClient() as client:
+            jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{pref_code}.json"
+            jma_res = await client.get(jma_url, timeout=10)
+            jma_res.raise_for_status()
+            jma_data = jma_res.json()
+
+        return jma_data
+
+    except httpx.HTTPStatusError as e:
+        logging.error(f"JMAエラー: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail=f"JMA APIエラー: {e.response.status_code}")
     except Exception as e:
-        logger.error("Error in get_disaster_alerts: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"災害アラート取得に失敗しました: {str(e)}")
+        logging.error(f"災害アラート取得エラー: {e}")
+        raise HTTPException(status_code=500, detail="災害アラート取得エラー")
 
 # ルートページ
 @app.get("/", response_class=HTMLResponse)

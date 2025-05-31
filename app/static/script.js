@@ -810,12 +810,70 @@ function initMap() {
       console.error("[initMap] #map not found");
       return;
     }
+
     map = L.map("map").setView([35.6762, 139.6503], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap contributors",
       maxZoom: 18,
     }).addTo(map);
+
     console.log("[initMap] Map initialized");
+
+    // ✅ 現在地取得してマップにマーカー表示し、警報を取得
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+
+      console.log("[現在地]", lat, lon);
+
+      await fetchDisasterAlerts(lat, lon);
+
+      const marker = L.marker([lat, lon]).addTo(map);
+      marker.bindPopup("あなたの現在地").openPopup();
+    }, err => {
+      console.warn("[現在地取得エラー]", err.message);
+    });
+
+  } catch (e) {
+    console.error("[initMap エラー]", e);
+  }
+}
+
+async function fetchDisasterAlerts(lat, lon) {
+  try {
+    // 都道府県名を取得（FastAPI経由で Nominatim または Yahoo API 使用）
+    const res = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
+    const data = await res.json();
+
+    const prefecture = data.prefecture;
+    if (!prefecture) {
+      console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
+      return;
+    }
+    console.log("[都道府県名]", prefecture);
+
+    // 警報データ取得
+    const alertRes = await fetch(`/api/disaster-alerts`);
+    const alertData = await alertRes.json();
+
+    const relevantAlerts = alertData.alerts.filter(alert =>
+      alert.area.includes(prefecture)
+    );
+
+    if (relevantAlerts.length === 0) {
+      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
+    } else {
+      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
+
+      // ✅ 表示する方法は必要に応じて変更可能
+      alert(`【警報あり】${prefecture}\n` + relevantAlerts.map(a => `・${a.type}：${a.level}`).join("\n"));
+    }
+  } catch (err) {
+    console.error("[fetchDisasterAlerts エラー]", err);
+  }
+}
+
+
 
     // 位置情報ボタン
     const geoButton = document.createElement("button");
