@@ -831,7 +831,7 @@ async def bulk_delete_shelters(
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
 @app.get("/api/reverse-geocode")
-async def reverse_geocode(lat: float = Query(...), lon: float = Query(...)):
+async def reverse_geocode(lat: float, lon: float):
     try:
         logger.info("Reverse geocoding: lat=%s, lon=%s", lat, lon)
         url = "https://nominatim.openstreetmap.org/reverse"
@@ -841,22 +841,20 @@ async def reverse_geocode(lat: float = Query(...), lon: float = Query(...)):
             "format": "json",
             "accept-language": "ja"
         }
-        headers = {"User-Agent": "SafeShelter/1.0"}
-
-        async with httpx.AsyncClient() as client:
-            res = await client.get(url, params=params, headers=headers)
+        async with httpx.AsyncClient(headers={"User-Agent": "SmartShelter/1.0"}) as client:
+            res = await client.get(url, params=params)
         res.raise_for_status()
-
         data = res.json()
         address = data.get("address", {})
-        prefecture = address.get("state") or address.get("region") or address.get("province")
+        prefecture = address.get("state") or address.get("region") or address.get("province") or address.get("county")
         if not prefecture:
-            raise HTTPException(status_code=404, detail="都道府県が見つかりませんでした")
+            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
         logger.info("Reverse geocode result: %s", prefecture)
         return {"prefecture": prefecture}
     except Exception as e:
-        logger.error("逆ジオコーディング失敗: %s", str(e))
+        logger.error("Reverse geocode error: %s", str(e))
         raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
+
 
 
 
