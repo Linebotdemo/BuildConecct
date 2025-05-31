@@ -899,27 +899,36 @@ async function fetchDisasterAlerts(lat, lon) {
       throw new Error(`HTTP error! status: ${alertRes.status}`);
     }
 
-    const alertData = await alertRes.json();
-    const alerts = alertData.alerts || alertData; // alerts プロパティがなければそのまま扱う
+const alertData = await alertRes.json();
+console.log("[fetchDisasterAlerts] 取得データ:", alertData);
 
-    if (!Array.isArray(alerts)) {
-      console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
-      return;
+// areaTypes → areas[] → warnings[] にアクセス
+const allWarnings = [];
+
+if (Array.isArray(alertData.areaTypes)) {
+  for (const areaType of alertData.areaTypes) {
+    for (const area of areaType.areas || []) {
+      for (const warning of area.warnings || []) {
+        allWarnings.push({
+          area: area.name,
+          type: warning.name,
+          level: warning.status
+        });
+      }
     }
+  }
+}
 
-    const relevantAlerts = alerts.filter(alert =>
-      alert.area.includes(prefecture)
-    );
+if (allWarnings.length === 0) {
+  console.log(`[fetchDisasterAlerts] ${prefecture} に警報はありません`);
+} else {
+  console.log(`[fetchDisasterAlerts] ${prefecture} の警報`, allWarnings);
+  alert(
+    `【警報あり】${prefecture}\n` +
+    allWarnings.map(w => `・${w.area}：${w.type}（${w.level}）`).join("\n")
+  );
+}
 
-    if (relevantAlerts.length === 0) {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
-    } else {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
-      alert(
-        `【警報あり】${prefecture}\n` +
-        relevantAlerts.map(a => `・${a.type}：${a.level}`).join("\n")
-      );
-    }
   } catch (err) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
