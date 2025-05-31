@@ -5,27 +5,18 @@ let map, userLocation, markers = [], alertPolygons = [], adminMap, adminMarkers 
 /**
  * Yahoo ジオコーディング API で住所を緯度経度に変換
  */
-async function geocodeWithYahoo(address) {
+async function geocodeAddressViaBackend(address) {
   try {
-    if (!address) throw new Error("住所が空です");
-    const url = new URL("https://map.yahooapis.jp/geocode/V1/geoCoder");
-    url.searchParams.set("appid", YAHOO_APPID);
-    url.searchParams.set("query", address);
-    url.searchParams.set("output", "json");
-
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Yahoo Geocode API error: ${res.status}`);
-    const j = await res.json();
-    if (!j.Feature?.length) throw new Error("住所が見つかりません");
-    const [lon, lat] = j.Feature[0].Geometry.Coordinates.split(",").map(parseFloat);
-    if (isNaN(lat) || isNaN(lon)) throw new Error("無効な座標");
-    console.log("[geocodeWithYahoo] Success:", { address, lat, lon });
+    const res = await fetch(`/api/geocode?address=${encodeURIComponent(address)}`);
+    if (!res.ok) throw new Error(`Geocode API error: ${res.status}`);
+    const { lat, lon } = await res.json();
     return [lat, lon];
   } catch (e) {
-    console.error("[geocodeWithYahoo] Error:", e.message);
+    console.error("[geocodeAddressViaBackend] Error:", e.message);
     throw e;
   }
 }
+
 
 /**
  * 避難所を取得

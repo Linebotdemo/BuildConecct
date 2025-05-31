@@ -836,7 +836,7 @@ async def reverse_geocode_endpoint(lat: float, lon: float):
         logger.info("Reverse geocoding lat=%.6f, lon=%.6f", lat, lon)
         url = "https://map.yahooapis.jp/geoapi/V1/reverseGeoCoder"
         params = {
-            "appid": YAHOO_APPID,
+            "appid": YAHOO_APPID,  # ← .env に定義必須！
             "lat": lat,
             "lon": lon,
             "output": "json",
@@ -855,6 +855,7 @@ async def reverse_geocode_endpoint(lat: float, lon: float):
     except Exception as e:
         logger.error("Reverse geocode failed: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
+
 
 
 
