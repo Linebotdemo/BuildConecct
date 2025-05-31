@@ -961,22 +961,7 @@ async function fetchDisasterAlerts(lat, lon) {
     document.querySelector(".container").prepend(geoButton);
     geoButton.click();
 
-    // 距離フィルターの円表示
-    document.getElementById("filter-distance")?.addEventListener("change", (e) => {
-      const maxDist = parseFloat(e.target.value);
-      if (map._circle) map.removeLayer(map._circle);
-      if (maxDist > 0 && userLocation) {
-        map._circle = L.circle(userLocation, {
-          radius: maxDist * 1000,
-          color: "blue",
-          fillOpacity: 0.1,
-        }).addTo(map);
-      }
-    });
-  } catch (e) {
-    console.error("[initMap] Error:", e.message);
-  }
-}
+
 
 /**
  * DOM読み込み完了時の初期化
