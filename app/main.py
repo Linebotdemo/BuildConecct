@@ -1158,36 +1158,30 @@ def get_area_bounds(area: str):
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        print(f"[DEBUG] 緯度経度: lat={lat}, lon={lon}")
-
-        # 逆ジオコーディングで都道府県取得
+        logger.info(f"[DEBUG] 受信した緯度経度: lat={lat}, lon={lon}")
         geocode_res = await reverse_geocode(lat, lon)
-        prefecture = geocode_res.get("prefecture")
-        print(f"[DEBUG] 都道府県名: {prefecture}")
+        if not geocode_res or "prefecture" not in geocode_res:
+            raise HTTPException(status_code=500, detail="逆ジオコーディングに失敗しました")
 
-        pref_code = PREF_CODE_MAP.get(prefecture)
+        pref_name = geocode_res["prefecture"]
+        pref_code = PREF_CODE_MAP.get(pref_name)
         if not pref_code:
-            raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりません: {prefecture}")
+            raise HTTPException(status_code=404, detail=f"都道府県コードが見つかりませんでした: {pref_name}")
 
         jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{pref_code}.json"
-        print(f"[DEBUG] JMA URL: {jma_url}")
-
         async with httpx.AsyncClient() as client:
-            res = await client.get(jma_url, timeout=10)
-            res.raise_for_status()
-            jma_data = res.json()
+            jma_res = await client.get(jma_url, timeout=10)
+            jma_res.raise_for_status()
+            jma_data = jma_res.json()
 
-        # areaTypesだけ抽出して alerts として返却
+        # ✅ 必要な情報だけ抽出して alerts: [] 形式に変換
         alerts = jma_data.get("areaTypes", [])
-        print(f"[DEBUG] 警報数: {len(alerts)}")
-        return {"alerts": alerts}
+        return {"alerts": alerts}  # ← フロントエンドの仕様と一致させる！
 
-    except httpx.HTTPStatusError as e:
-        print(f"[ERROR] JMAエラー: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail="JMA API エラー")
     except Exception as e:
-        print(f"[ERROR] 全体エラー: {e}")
+        logger.error(f"[ERROR] 災害アラート取得エラー: {e}")
         raise HTTPException(status_code=500, detail="災害アラート取得エラー")
+
 
 
 
