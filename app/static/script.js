@@ -819,25 +819,66 @@ function initMap() {
 
     console.log("[initMap] Map initialized");
 
-    // ✅ 現在地取得してマップにマーカー表示し、警報を取得
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
+    const geoButton = document.createElement("button");
+    geoButton.textContent = "現在地を取得";
+    geoButton.className = "btn btn-primary mb-3";
+    geoButton.onclick = () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            userLocation = [position.coords.latitude, position.coords.longitude];
+            L.marker(userLocation, {
+              icon: L.divIcon({ className: "user-icon", html: "📍" }),
+            })
+              .addTo(map)
+              .bindPopup("現在地")
+              .openPopup();
+            map.setView(userLocation, 12);
+            console.log("[initMap] User location:", userLocation);
+            fetchShelters();
+            fetchAlerts();
+            fetchDisasterAlerts(userLocation[0], userLocation[1]);
+          },
+          (error) => {
+            console.warn("[initMap] Geolocation error:", error.message);
+            userLocation = [35.6762, 139.6503]; // fallback
+            fetchShelters();
+            fetchAlerts();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          }
+        );
+      } else {
+        console.warn("[initMap] Geolocation not supported");
+        userLocation = [35.6762, 139.6503];
+        fetchShelters();
+        fetchAlerts();
+      }
+    };
+    document.querySelector(".container").prepend(geoButton);
+    geoButton.click();
 
-      console.log("[現在地]", lat, lon);
-
-      await fetchDisasterAlerts(lat, lon);
-
-      const marker = L.marker([lat, lon]).addTo(map);
-      marker.bindPopup("あなたの現在地").openPopup();
-    }, err => {
-      console.warn("[現在地取得エラー]", err.message);
+    // 距離フィルターの円表示
+    document.getElementById("filter-distance")?.addEventListener("change", (e) => {
+      const maxDist = parseFloat(e.target.value);
+      if (map._circle) map.removeLayer(map._circle);
+      if (maxDist > 0 && userLocation) {
+        map._circle = L.circle(userLocation, {
+          radius: maxDist * 1000,
+          color: "blue",
+          fillOpacity: 0.1,
+        }).addTo(map);
+      }
     });
 
   } catch (e) {
-    console.error("[initMap エラー]", e);
+    console.error("[initMap] Error:", e.message);
   }
 }
+
 
 async function fetchDisasterAlerts(lat, lon) {
   try {
