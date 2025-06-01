@@ -1214,8 +1214,6 @@ import httpx
 import xmltodict
 from fastapi import APIRouter, Query, HTTPException
 from typing import Dict
-from .pref_code_map import PREF_CODE_MAP  # 別ファイルに分けてある場合
-# または PREF_CODE_MAP を直接上部に定義してもOK
 
 router = APIRouter()
 
