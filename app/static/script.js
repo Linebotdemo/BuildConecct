@@ -890,10 +890,11 @@ async function fetchDisasterAlerts(lat, lon) {
 
     const alerts = Array.isArray(alertData.alerts) ? alertData.alerts : Object.values(alertData.alerts || {});
 
-    if (!Array.isArray(alerts)) {
-      console.error("警報データが配列ではありません", alertData);
-      return;
-    }
+if (!Array.isArray(alerts)) {
+  console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
+  return;
+}
+
 
 
     const relevantAlerts = alerts.filter(alert =>
