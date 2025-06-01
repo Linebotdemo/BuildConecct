@@ -888,12 +888,12 @@ async function fetchDisasterAlerts(lat, lon) {
     const alertData = await alertRes.json();
     console.log("alertData:", alertData);
 
-    const alerts = Array.isArray(alertData.alerts) ? alertData.alerts : Object.values(alertData.alerts || {});
-
+const alerts = alertData.alerts;
 if (!Array.isArray(alerts)) {
   console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
   return;
 }
+
 
 
 
