@@ -32,6 +32,7 @@ from jose import JWTError, jwt
 from fastapi import Query
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
+from fastapi import Query, HTTPException
 import httpx
 import xml.etree.ElementTree as ET
 logging.basicConfig(level=logging.DEBUG)
@@ -1162,23 +1163,25 @@ def get_area_bounds(area: str):
         "神奈川県": [[35.1, 139.0], [35.6, 139.7]],
     }
     return bounds.get(area, [[35.6762, 139.6503], [35.6762, 139.6503]])
+
+
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        # 任意: JMAのURL決定に緯度・経度を使う処理を追加しても良い
         url = "https://www.jma.go.jp/bosai/warning/data/warning.json"
         async with httpx.AsyncClient() as client:
             res = await client.get(url)
         res.raise_for_status()
-        jma_data = res.json()
 
+        jma_data = res.json()
         alerts = jma_data.get("alerts", [])
         if not isinstance(alerts, list):
-            raise HTTPException(status_code=500, detail="alertsデータが不正です")
+            raise HTTPException(status_code=500, detail="警報データが配列ではありません")
 
         return {"alerts": alerts}
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"気象庁データ取得エラー: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"気象庁APIエラー: {str(e)}")
 
 
 
