@@ -829,36 +829,31 @@ async def bulk_delete_shelters(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
-@app.get("/api/reverse-geocode")
-async def reverse_geocode(lat: float, lon: float):
-    try:
-        url = "https://nominatim.openstreetmap.org/reverse"
-        params = {
-            "lat": lat,
-            "lon": lon,
-            "format": "json",
-            "accept-language": "ja"
-        }
-        headers = {
-            "User-Agent": "SafeShelterApp/1.0 (k.inose0902@gmail.com)"  # 必ず連絡先付き
-        }
+GEOAPIFY_API_KEY = "b0faad5856ad4879af9ab878c6b329d2"
 
+@router.get("/api/reverse-geocode")
+async def reverse_geocode(lat: float, lon: float):
+    url = "https://api.geoapify.com/v1/geocode/reverse"
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "lang": "ja",  # 日本語で取得
+        "apiKey": GEOAPIFY_API_KEY
+    }
+
+    try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, params=params, headers=headers)
+            res = await client.get(url, params=params)
         res.raise_for_status()
         data = res.json()
 
-        logger.info(f"Nominatim response: {data}")
-        address = data.get("address", {})
-        prefecture = (
-            address.get("state") or
-            address.get("province")  # fallback
-        )
-        city = (
-            address.get("city") or
-            address.get("town") or
-            address.get("village")
-        )
+        features = data.get("features", [])
+        if not features:
+            raise HTTPException(status_code=404, detail="住所が見つかりません")
+
+        prop = features[0].get("properties", {})
+        prefecture = prop.get("state", "")
+        city = prop.get("city", "") or prop.get("county", "") or prop.get("municipality", "")
 
         if not prefecture:
             raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
@@ -869,8 +864,7 @@ async def reverse_geocode(lat: float, lon: float):
         }
 
     except Exception as e:
-        logger.error(f"Reverse geocode error: {e}")
-        raise HTTPException(status_code=500, detail=f"逆ジオコーディングに失敗しました: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
 
 
 
