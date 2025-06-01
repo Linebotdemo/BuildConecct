@@ -885,21 +885,18 @@ async function fetchDisasterAlerts(lat, lon) {
 
     const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
     if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
-const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
-const alertData = await alertRes.json();
+    const alertData = await alertRes.json();
 
-const alerts = alertData.alerts;
-if (!Array.isArray(alerts)) {
-  console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
-  return;
-}
+    const alerts = alertData.alerts;
+    if (!Array.isArray(alerts)) {
+      console.error("[fetchDisasterAlerts] alertsが配列ではありません", alerts);
+      return;
+    }
 
-const relevantAlerts = alerts.filter(alert =>
-  Array.isArray(alert.areas) &&
-  alert.areas.some(area => area?.name?.includes(prefecture))
-);
-
-
+    const relevantAlerts = alerts.filter(alert =>
+      Array.isArray(alert.areas) &&
+      alert.areas.some(area => area?.name?.includes(prefecture))
+    );
 
     if (relevantAlerts.length === 0) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
@@ -908,7 +905,7 @@ const relevantAlerts = alerts.filter(alert =>
       alert(
         `【警報あり】${prefecture}\n` +
         relevantAlerts.map(a =>
-          `・${a.kind?.name}：${a.infos?.map(info => info.status).join("、")}`
+          `・${a.kind}：${a.infos?.map(info => info.status).join("、")}`
         ).join("\n")
       );
     }
