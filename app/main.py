@@ -1303,6 +1303,18 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
         # 常にエラーを握りつぶして空リストを返す
         return {"tsunami_alerts": []}
 
+async def get_reverse_geocode(lat: float, lon: float) -> dict:
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res = await client.get(url)
+        res.raise_for_status()
+        data = await res.json()
+        address = data.get("address", {})
+        return {
+            "prefecture": address.get("state", ""),
+            "city": address.get("city", "") or address.get("town", "") or address.get("village", "")
+        }
+
 
 
 # ルートページ
