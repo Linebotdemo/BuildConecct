@@ -139,7 +139,7 @@
         console.log("都道府県名:", prefecture);
 
         // 全警報を取得
-        const alertsRes = await fetch("/api/disaster-alerts");
+        const alertsRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
         const alerts = await alertsRes.json();
 
         // 該当する都道府県の警報だけ抽出
