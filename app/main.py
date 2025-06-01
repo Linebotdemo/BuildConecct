@@ -831,48 +831,46 @@ async def bulk_delete_shelters(
 
 @app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
-    if not YAHOO_APPID:
-        raise HTTPException(status_code=500, detail="Yahoo APPIDが未設定です")
-
-    url = "https://map.yahooapis.jp/geoapi/V1/reverseGeoCoder"
-    params = {
-        "lat": lat,
-        "lon": lon,
-        "output": "json",
-        "appid": YAHOO_APPID
-    }
-
     try:
+        url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            "lat": lat,
+            "lon": lon,
+            "format": "json",
+            "accept-language": "ja"
+        }
+        headers = {
+            "User-Agent": "SafeShelterApp/1.0 (k.inose0902@gmail.com)"  # 必ず連絡先付き
+        }
+
         async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, params=params)
+            res = await client.get(url, params=params, headers=headers)
         res.raise_for_status()
         data = res.json()
 
-        features = data.get("Feature", [])
-        if not features:
-            raise HTTPException(status_code=404, detail="住所が見つかりません")
-
-        address_elements = features[0].get("Property", {}).get("AddressElement", [])
-        prefecture = ""
-        city = ""
-
-        for el in address_elements:
-            if el.get("Level") == "prefecture":
-                prefecture = el.get("Name")
-            elif el.get("Level") == "city":
-                city = el.get("Name")
+        logger.info(f"Nominatim response: {data}")
+        address = data.get("address", {})
+        prefecture = (
+            address.get("state") or
+            address.get("province")  # fallback
+        )
+        city = (
+            address.get("city") or
+            address.get("town") or
+            address.get("village")
+        )
 
         if not prefecture:
             raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
 
         return {
             "prefecture": prefecture,
-            "city": city
+            "city": city or ""
         }
 
     except Exception as e:
-        logger.error(f"Yahoo Reverse Geocode error: {e}")
-        raise HTTPException(status_code=500, detail=f"Yahoo逆ジオコーディングに失敗しました: {str(e)}")
+        logger.error(f"Reverse geocode error: {e}")
+        raise HTTPException(status_code=500, detail=f"逆ジオコーディングに失敗しました: {str(e)}")
 
 
 
