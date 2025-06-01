@@ -1270,10 +1270,7 @@ async def get_quake_alerts():
 
 # 津波警報 API
 @app.get("/api/tsunami-alerts")
-async def get_tsunami_alerts(
-    lat: float = Query(...),
-    lon: float = Query(...)
-):
+async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     geo = await get_reverse_geocode(lat, lon)
     prefecture = geo.get("prefecture", "")
     print(f"[津波API] 取得した都道府県: {prefecture}")
@@ -1282,30 +1279,30 @@ async def get_tsunami_alerts(
         url = "https://www.jma.go.jp/bosai/tsunami/data/message.json"
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url)
+            if res.status_code == 404:
+                # 津波警報が出ていない平常時
+                print("[津波API] 津波データなし（404）")
+                return {"tsunami_alerts": []}
+
             res.raise_for_status()
             data = await res.json()
 
-        print(f"[津波API] JSONキー: {list(data.keys())}")
         relevant = []
-
         for area in data.get("areaTypes", []):
-            print(f"[津波API] category: {area.get('category')}")
             for region in area.get("areas", []):
-                print(f"[津波API] 地域: {region.get('name')} / グレード: {region.get('grade')}")
                 if prefecture and prefecture in region.get("name", ""):
                     relevant.append({
-                        "name": region["name"],
-                        "category": area["category"],
+                        "name": region.get("name"),
+                        "category": area.get("category"),
                         "grade": region.get("grade")
                     })
 
-        print(f"[津波API] 該当: {relevant}")
+        print(f"[津波API] 該当地域の津波警報: {relevant}")
         return {"tsunami_alerts": relevant}
 
     except Exception as e:
-        print(f"[津波APIエラー] {str(e)}")
-        raise HTTPException(status_code=500, detail=f"津波データ取得に失敗: {str(e)}")
-
+        print(f"[津波APIエラー] {e}")
+        raise HTTPException(status_code=500, detail=f"津波データ取得に失敗: {e}")
 
 
 
