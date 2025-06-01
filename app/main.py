@@ -1272,7 +1272,7 @@ async def get_quake_alerts():
         raise HTTPException(status_code=500, detail=f"地震データ取得に失敗: {str(e)}")
 
 # 津波警報 API
-@router.get("/api/tsunami-alerts")
+@app.get("/api/tsunami-alerts")
 async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
         # Step 1: 都道府県名取得
