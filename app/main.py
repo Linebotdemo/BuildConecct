@@ -832,7 +832,6 @@ async def bulk_delete_shelters(
 @app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
     if not YAHOO_APPID:
-        logger.error("Yahoo APPIDが未設定です")
         raise HTTPException(status_code=500, detail="Yahoo APPIDが未設定です")
 
     url = "https://map.yahooapis.jp/geoapi/V1/reverseGeoCoder"
@@ -840,7 +839,7 @@ async def reverse_geocode(lat: float, lon: float):
         "lat": lat,
         "lon": lon,
         "output": "json",
-        "appid": YAHOO_APPID,
+        "appid": YAHOO_APPID
     }
 
     try:
@@ -848,20 +847,23 @@ async def reverse_geocode(lat: float, lon: float):
             res = await client.get(url, params=params)
         res.raise_for_status()
         data = res.json()
-        logger.info(f"Yahoo Reverse Geocode response: {data}")
 
         features = data.get("Feature", [])
         if not features:
             raise HTTPException(status_code=404, detail="住所が見つかりません")
 
-        address = features[0].get("Property", {}).get("Address", "")
-        if not address:
-            raise HTTPException(status_code=404, detail="住所情報が空です")
+        address_elements = features[0].get("Property", {}).get("AddressElement", [])
+        prefecture = ""
+        city = ""
 
-        # 住所分割（例: 東京都 新宿区 ...）
-        parts = address.split(" ")
-        prefecture = parts[0] if len(parts) > 0 else ""
-        city = parts[1] if len(parts) > 1 else ""
+        for el in address_elements:
+            if el.get("Level") == "prefecture":
+                prefecture = el.get("Name")
+            elif el.get("Level") == "city":
+                city = el.get("Name")
+
+        if not prefecture:
+            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
 
         return {
             "prefecture": prefecture,
