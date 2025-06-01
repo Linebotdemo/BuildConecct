@@ -911,43 +911,6 @@ async function fetchDisasterAlerts(lat, lon) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
     }
 
-async function fetchDisasterAlerts(lat, lon) {
-  try {
-    const geoRes = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
-    const geoData = await geoRes.json();
-    const prefecture = geoData.prefecture;
-
-    if (!prefecture) {
-      console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
-      return;
-    }
-    console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
-    console.log("fetching disaster alerts with:", lat, lon);
-
-    const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
-    console.log("alertRes.ok:", alertRes.ok);
-    console.log("Content-Type:", alertRes.headers.get("content-type"));
-    if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
-    const alertData = await alertRes.json();
-    const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
-
-    if (alerts.length) {
-      const relevantAlerts = alerts.filter(alert =>
-        Array.isArray(alert.areas) &&
-        alert.areas.some(area => area?.name?.includes(prefecture))
-      );
-
-      if (relevantAlerts.length > 0) {
-        console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
-        alert(
-          `【警報あり】${prefecture}\n` +
-          relevantAlerts.map(a =>
-            `・${a.kind}：${a.infos?.map(info => info.status).join("、")}`
-          ).join("\n")
-        );
-      }
-    }
-
     // --- 地震速報 ---
     const quakeRes = await fetch("/api/quake-alerts");
     if (quakeRes.ok) {
@@ -980,10 +943,6 @@ async function fetchDisasterAlerts(lat, lon) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
-
-
-
-
 
 
 
