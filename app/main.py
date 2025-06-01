@@ -141,35 +141,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/company-token")
 # HTTP クライアント
 http_client = httpx.AsyncClient(timeout=10.0)
 
-def get_prefecture_code(lat: float, lon: float) -> str:
 
-    try:
-        response = httpx.get(
-            f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&accept-language=ja",
-            timeout=10.0,
-            headers={"User-Agent": "SmartShelter"}
-        )
-        response.raise_for_status()
-        data = response.json()
-        prefecture = data.get("address", {}).get("province")
-
-        # 都道府県から JMA コードに変換
-        prefecture_code_map = {
-            "北海道": "016000", "青森県": "020000", "岩手県": "030000", "宮城県": "040000", "秋田県": "050000",
-            "山形県": "060000", "福島県": "070000", "茨城県": "080000", "栃木県": "090000", "群馬県": "100000",
-            "埼玉県": "110000", "千葉県": "120000", "東京都": "130000", "神奈川県": "140000", "新潟県": "150000",
-            "富山県": "160000", "石川県": "170000", "福井県": "180000", "山梨県": "190000", "長野県": "200000",
-            "岐阜県": "210000", "静岡県": "220000", "愛知県": "230000", "三重県": "240000", "滋賀県": "250000",
-            "京都府": "260000", "大阪府": "270000", "兵庫県": "280000", "奈良県": "290000", "和歌山県": "300000",
-            "鳥取県": "310000", "島根県": "320000", "岡山県": "330000", "広島県": "340000", "山口県": "350000",
-            "徳島県": "360000", "香川県": "370000", "愛媛県": "380000", "高知県": "390000", "福岡県": "400000",
-            "佐賀県": "410000", "長崎県": "420000", "熊本県": "430000", "大分県": "440000", "宮崎県": "450000",
-            "鹿児島県": "460100", "沖縄県": "471000"
-        }
-
-        return prefecture_code_map.get(prefecture, "080000")  # デフォルトは茨城県
-    except Exception as e:
-        raise ValueError(f"都道府県コードの取得に失敗しました: {str(e)}")
 
 
 
@@ -1181,19 +1153,76 @@ def get_area_bounds(area: str):
     return bounds.get(area, [[35.6762, 139.6503], [35.6762, 139.6503]])
 
 
+PREF_CODE_MAP = {
+    "北海道": "016000",
+    "青森県": "020000",
+    "岩手県": "030000",
+    "宮城県": "040000",
+    "秋田県": "050000",
+    "山形県": "060000",
+    "福島県": "070000",
+    "茨城県": "080000",
+    "栃木県": "090000",
+    "群馬県": "100000",
+    "埼玉県": "110000",
+    "千葉県": "120000",
+    "東京都": "130000",
+    "神奈川県": "140000",
+    "新潟県": "150000",
+    "富山県": "160000",
+    "石川県": "170000",
+    "福井県": "180000",
+    "山梨県": "190000",
+    "長野県": "200000",
+    "岐阜県": "210000",
+    "静岡県": "220000",
+    "愛知県": "230000",
+    "三重県": "240000",
+    "滋賀県": "250000",
+    "京都府": "260000",
+    "大阪府": "270000",
+    "兵庫県": "280000",
+    "奈良県": "290000",
+    "和歌山県": "300000",
+    "鳥取県": "310000",
+    "島根県": "320000",
+    "岡山県": "330000",
+    "広島県": "340000",
+    "山口県": "350000",
+    "徳島県": "360000",
+    "香川県": "370000",
+    "愛媛県": "380000",
+    "高知県": "390000",
+    "福岡県": "400000",
+    "佐賀県": "410000",
+    "長崎県": "420000",
+    "熊本県": "430000",
+    "大分県": "440000",
+    "宮崎県": "450000",
+    "鹿児島県": "460100",
+    "沖縄県": "471000"
+}
+
+
+def get_prefecture_code(lat: float, lon: float) -> str:
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+    res = requests.get(url, headers={"User-Agent": "smart-shelter"})
+    data = res.json()
+    prefecture = data.get("address", {}).get("province") or data.get("address", {}).get("state")
+    return PREF_CODE_MAP.get(prefecture, "080000")  # 見つからない場合は茨城県コードを返す
+
+
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float, lon: float):
-    # 県コードを算出（例: 茨城県 → 080000）
     prefecture_code = get_prefecture_code(lat, lon)
     jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
-    
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(jma_url)
             res.raise_for_status()
             jma_data = res.json()
 
-        # alerts に加工する
         alerts = []
         for series in jma_data.get("timeSeries", []):
             for area in series.get("areas", []):
