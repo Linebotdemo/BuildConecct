@@ -1273,18 +1273,16 @@ async def get_quake_alerts():
 async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     geo = await get_reverse_geocode(lat, lon)
     prefecture = geo.get("prefecture", "")
-    print(f"[津波API] 取得した都道府県: {prefecture}")
+    print(f"[津波API] 都道府県: {prefecture}")
 
+    url = "https://www.jma.go.jp/bosai/tsunami/data/message.json"
     try:
-        url = "https://www.jma.go.jp/bosai/tsunami/data/message.json"
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url)
-            if res.status_code == 404:
-                # 津波警報が出ていない平常時
-                print("[津波API] 津波データなし（404）")
+            print(f"[津波API] ステータスコード: {res.status_code}")
+            if res.status_code != 200:
                 return {"tsunami_alerts": []}
 
-            res.raise_for_status()
             data = await res.json()
 
         relevant = []
@@ -1297,12 +1295,13 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
                         "grade": region.get("grade")
                     })
 
-        print(f"[津波API] 該当地域の津波警報: {relevant}")
+        print(f"[津波API] 抽出された警報: {relevant}")
         return {"tsunami_alerts": relevant}
 
     except Exception as e:
         print(f"[津波APIエラー] {e}")
-        raise HTTPException(status_code=500, detail=f"津波データ取得に失敗: {e}")
+        # 常にエラーを握りつぶして空リストを返す
+        return {"tsunami_alerts": []}
 
 
 
