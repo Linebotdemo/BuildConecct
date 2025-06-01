@@ -141,16 +141,18 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/company-token")
 # HTTP クライアント
 http_client = httpx.AsyncClient(timeout=10.0)
 
-# --- 都道府県 → コード辞書 ---
 PREF_CODE_MAP = {
-    "北海道": "01", "青森県": "02", "岩手県": "03", "宮城県": "04", "秋田県": "05", "山形県": "06",
-    "福島県": "07", "茨城県": "08", "栃木県": "09", "群馬県": "10", "埼玉県": "11", "千葉県": "12",
-    "東京都": "13", "神奈川県": "14", "新潟県": "15", "富山県": "16", "石川県": "17", "福井県": "18",
-    "山梨県": "19", "長野県": "20", "岐阜県": "21", "静岡県": "22", "愛知県": "23", "三重県": "24",
-    "滋賀県": "25", "京都府": "26", "大阪府": "27", "兵庫県": "28", "奈良県": "29", "和歌山県": "30",
-    "鳥取県": "31", "島根県": "32", "岡山県": "33", "広島県": "34", "山口県": "35", "徳島県": "36",
-    "香川県": "37", "愛媛県": "38", "高知県": "39", "福岡県": "40", "佐賀県": "41", "長崎県": "42",
-    "熊本県": "43", "大分県": "44", "宮崎県": "45", "鹿児島県": "46", "沖縄県": "47"
+    "北海道": "010000", "青森県": "020000", "岩手県": "030000", "宮城県": "040000", "秋田県": "050000",
+    "山形県": "060000", "福島県": "070000", "茨城県": "080000", "栃木県": "090000", "群馬県": "100000",
+    "埼玉県": "110000", "千葉県": "120000", "東京都": "130000", "神奈川県": "140000", "新潟県": "150000",
+    "富山県": "160000", "石川県": "170000", "福井県": "180000", "山梨県": "190000", "長野県": "200000",
+    "岐阜県": "210000", "静岡県": "220000", "愛知県": "230000", "三重県": "240000", "滋賀県": "250000",
+    "京都府": "260000", "大阪府": "270000", "兵庫県": "280000", "奈良県": "290000", "和歌山県": "300000",
+    "鳥取県": "310000", "島根県": "320000", "岡山県": "330000", "広島県": "340000", "山口県": "350000",
+    "徳島県": "360000", "香川県": "370000", "愛媛県": "380000", "高知県": "390000", "福岡県": "400000",
+    "佐賀県": "410000", "長崎県": "420000", "熊本県": "430000", "大分県": "440000", "宮崎県": "450000",
+    "鹿児島県": "460100", "沖縄県": "471000"
+}
 }
 
 
@@ -1168,20 +1170,32 @@ def get_area_bounds(area: str):
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        url = "https://www.jma.go.jp/bosai/warning/data/warning.json"
-        async with httpx.AsyncClient() as client:
+        # ① 逆ジオコーディングで都道府県取得
+        geo_url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&accept-language=ja"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            geo_res = await client.get(geo_url)
+            geo_data = geo_res.json()
+            prefecture = geo_data.get("address", {}).get("province")
+
+        if not prefecture:
+            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
+
+        area_code = PREF_CODE_MAP.get(prefecture)
+        if not area_code:
+            raise HTTPException(status_code=404, detail=f"{prefecture} に対応する area_code が見つかりません")
+
+        # ② 気象庁の警報データ取得
+        url = f"https://www.jma.go.jp/bosai/warning/data/warning/{area_code}.json"
+        async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url)
-        res.raise_for_status()
+            res.raise_for_status()
+            data = res.json()
 
-        jma_data = res.json()
-        alerts = jma_data.get("alerts", [])
-        if not isinstance(alerts, list):
-            raise HTTPException(status_code=500, detail="警報データが配列ではありません")
-
-        return {"alerts": alerts}
+        return JSONResponse(content=data)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"気象庁APIエラー: {str(e)}")
+        logger.error("Error in get_disaster_alerts: %s\n%s", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
 
 
 
