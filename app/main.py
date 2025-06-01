@@ -1244,7 +1244,61 @@ async def get_disaster_alerts(
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
 
 
+@app.get("/api/quake-alerts")
+async def get_quake_alerts():
+    try:
+        url = "https://www.jma.go.jp/bosai/quake/data/list.json"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url)
+            res.raise_for_status()
+            data = res.json()
+        
+        if not data:
+            return {"quakes": []}
+        
+        latest = data[0]  # 最新の1件のみ
+        return {
+            "quakes": [{
+                "time": latest.get("time"),
+                "place": latest.get("hypoCenter", {}).get("name"),
+                "maxScale": latest.get("maxScale")  # 震度（整数：10=1, 20=2, ..., 70=7）
+            }]
+        }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"地震データ取得に失敗: {str(e)}")
+
+# 津波警報 API
+@app.get("/api/tsunami-alerts")
+async def get_tsunami_alerts(
+    lat: float = Query(...),
+    lon: float = Query(...)
+):
+    # 位置から都道府県取得（既存の reverse-geocode 流用）
+    geo = await get_reverse_geocode(lat, lon)
+    prefecture = geo.get("prefecture", "")
+
+    try:
+        url = "https://www.jma.go.jp/bosai/tsunami/data/message.json"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(url)
+            res.raise_for_status()
+            data = res.json()
+
+        relevant = []
+        for area in data.get("areaTypes", []):
+            for region in area.get("areas", []):
+                if prefecture and prefecture in region.get("name", ""):
+                    relevant.append({
+                        "name": region["name"],
+                        "category": area["category"],
+                        "grade": region.get("grade")
+                    })
+
+        return {"tsunami_alerts": relevant}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"津波データ取得に失敗: {str(e)}")
 
 
 # ルートページ

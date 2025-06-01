@@ -881,9 +881,11 @@ async function fetchDisasterAlerts(lat, lon) {
       console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
       return;
     }
+
     console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
     console.log("fetching disaster alerts with:", lat, lon);
 
+    // --- 気象警報 ---
     const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
     console.log("alertRes.ok:", alertRes.ok);
     console.log("Content-Type:", alertRes.headers.get("content-type"));
@@ -891,35 +893,55 @@ async function fetchDisasterAlerts(lat, lon) {
     const alertData = await alertRes.json();
     console.log("alertData:", alertData);
 
-// 安全な取り出し
     const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
-
-    if (!alerts.length) {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
-      return;
-    }
-
-
     const relevantAlerts = alerts.filter(alert =>
       Array.isArray(alert.areas) &&
       alert.areas.some(area => area?.name?.includes(prefecture))
     );
 
-    if (relevantAlerts.length === 0) {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に警報はありません`);
-    } else {
+    if (relevantAlerts.length > 0) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
       alert(
-        `【警報あり】${prefecture}\n` +
+        `【気象警報】${prefecture}\n` +
         relevantAlerts.map(a =>
           `・${a.kind}：${a.infos?.map(info => info.status).join("、")}`
         ).join("\n")
       );
+    } else {
+      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
     }
+
+    // --- 地震速報 ---
+    const quakeRes = await fetch("/api/quake-alerts");
+    if (quakeRes.ok) {
+      const quakeData = await quakeRes.json();
+      const quake = quakeData.quakes?.[0];
+      if (quake) {
+        const scale = quake.maxScale / 10;
+        alert(`【地震速報】\n震源地: ${quake.place}\n最大震度: ${scale}`);
+      }
+    }
+
+    // --- 津波警報 ---
+    const tsunamiRes = await fetch(`/api/tsunami-alerts?lat=${lat}&lon=${lon}`);
+    if (tsunamiRes.ok) {
+      const tsunamiData = await tsunamiRes.json();
+      const tsunamiAlerts = tsunamiData.tsunami_alerts || [];
+      if (tsunamiAlerts.length > 0) {
+        alert(
+          `【津波警報】${prefecture}\n` +
+          tsunamiAlerts.map(a =>
+            `・${a.name}：${a.category}（${a.grade || "不明"}）`
+          ).join("\n")
+        );
+      }
+    }
+
   } catch (err) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
+
 
 
 
