@@ -914,8 +914,6 @@ async function fetchDisasterAlerts(lat, lon) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
     }
 
-async function fetchDisasterAlerts(lat, lon, prefecture) {
-  try {
     // --- 地震速報 ---
     const quakeRes = await fetch("/api/quake-alerts");
     if (quakeRes.ok) {
@@ -948,8 +946,6 @@ async function fetchDisasterAlerts(lat, lon, prefecture) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
-
-
 
 
     // 位置情報ボタン
