@@ -1309,7 +1309,7 @@ async def get_reverse_geocode(lat: float, lon: float) -> dict:
     async with httpx.AsyncClient(timeout=10.0) as client:
         res = await client.get(url, headers=headers)
         res.raise_for_status()
-        data = await res.json()
+        data = res.json()  # ←ここで await は不要
         address = data.get("address", {})
         return {
             "prefecture": address.get("state", ""),
