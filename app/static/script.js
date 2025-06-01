@@ -882,6 +882,7 @@ async function fetchDisasterAlerts(lat, lon) {
       return;
     }
     console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
+    console.log("fetching disaster alerts with:", lat, lon);
 
     const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
     if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);

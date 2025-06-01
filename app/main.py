@@ -1238,7 +1238,7 @@ async def get_disaster_alerts(
                     "infos": [{"status": warn.get("status", "")} for warn in area.get("warnings", [])]
                 })
 
-        return {"alerts": alerts}
+        return {"alerts": alerts or []}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
