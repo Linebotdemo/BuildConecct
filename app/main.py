@@ -22,6 +22,8 @@ from fastapi import (
     Form,
     Query,
 )
+
+import requests
 from fastapi.responses import HTMLResponse, Response, FileResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -73,6 +75,7 @@ from schemas import (
 
 # --- 企業周りのRouter ---
 from utils import router as company_router
+app = FastAPI()
 
 
 # FastAPI アプリケーション
