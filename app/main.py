@@ -41,6 +41,10 @@ import httpx
 import xml.etree.ElementTree as ET
 logging.basicConfig(level=logging.DEBUG)
 from typing import List, Optional, Dict
+from fastapi import APIRouter, HTTPException
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # ロギング設定
 logging.basicConfig(
