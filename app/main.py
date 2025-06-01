@@ -1216,7 +1216,10 @@ def get_prefecture_code(lat: float, lon: float) -> str:
 
 
 @app.get("/api/disaster-alerts")
-async def get_disaster_alerts(lat: float, lon: float):
+async def get_disaster_alerts(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude")
+):
     prefecture_code = get_prefecture_code(lat, lon)
     jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
 

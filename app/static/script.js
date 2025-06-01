@@ -885,8 +885,8 @@ async function fetchDisasterAlerts(lat, lon) {
 
     const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
     if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
-    const alertData = await alertRes.json();
-    console.log("alertData:", alertData);
+const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
+const alertData = await alertRes.json();
 
 const alerts = alertData.alerts;
 if (!Array.isArray(alerts)) {
@@ -894,12 +894,11 @@ if (!Array.isArray(alerts)) {
   return;
 }
 
+const relevantAlerts = alerts.filter(alert =>
+  Array.isArray(alert.areas) &&
+  alert.areas.some(area => area?.name?.includes(prefecture))
+);
 
-
-
-    const relevantAlerts = alerts.filter(alert =>
-      alert.areas?.some(area => area.name.includes(prefecture))
-    );
 
 
     if (relevantAlerts.length === 0) {
