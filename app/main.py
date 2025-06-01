@@ -1272,7 +1272,7 @@ async def get_quake_alerts():
         raise HTTPException(status_code=500, detail=f"地震データ取得に失敗: {str(e)}")
 
 # 津波警報 API
-@app.get("/api/tsunami-alerts")
+@router.get("/api/tsunami-alerts")
 async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
         # Step 1: 都道府県名取得
@@ -1332,6 +1332,19 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     except Exception as e:
         print(f"[津波APIエラー] {e}")
         raise HTTPException(status_code=500, detail="津波情報の取得に失敗しました")
+
+async def get_reverse_geocode(lat: float, lon: float) -> dict:
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
+    headers = {"User-Agent": "SafeShelterApp/1.0 (your_email@example.com)"}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res = await client.get(url, headers=headers)
+        res.raise_for_status()
+        data = res.json()
+        address = data.get("address", {})
+        return {
+            "prefecture": address.get("state", ""),
+            "city": address.get("city", "") or address.get("town", "") or address.get("village", "")
+        }
 
 
 
