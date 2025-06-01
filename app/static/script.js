@@ -914,11 +914,12 @@ async function fetchDisasterAlerts(lat, lon) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
     }
 
+async function fetchDisasterAlerts(lat, lon, prefecture) {
+  try {
     // --- 地震速報 ---
     const quakeRes = await fetch("/api/quake-alerts");
     if (quakeRes.ok) {
       const quakeData = await quakeRes.json();
-      console.log("[地震データ]", quakeData);
       const quake = quakeData.quakes?.[0];
       if (quake) {
         const scale = quake.maxScale / 10;
@@ -930,15 +931,16 @@ async function fetchDisasterAlerts(lat, lon) {
     const tsunamiRes = await fetch(`/api/tsunami-alerts?lat=${lat}&lon=${lon}`);
     if (tsunamiRes.ok) {
       const tsunamiData = await tsunamiRes.json();
-      console.log("[津波データ]", tsunamiData);
       const tsunamiAlerts = tsunamiData.tsunami_alerts || [];
+
+      console.log("[津波警報]", tsunamiAlerts);
+
       if (tsunamiAlerts.length > 0) {
-        alert(
-          `【津波警報】${prefecture}\n` +
-          tsunamiAlerts.map(a =>
-            `・${a.name}：${a.category}（${a.grade || "不明"}）`
-          ).join("\n")
-        );
+        const message = tsunamiAlerts.map(a =>
+          `・${a.name}：${a.category}（${a.grade}）`
+        ).join("\n");
+
+        alert(`【津波警報】${prefecture}\n${message}`);
       }
     }
 
@@ -946,6 +948,7 @@ async function fetchDisasterAlerts(lat, lon) {
     console.error("[fetchDisasterAlerts エラー]", err);
   }
 }
+
 
 
 
