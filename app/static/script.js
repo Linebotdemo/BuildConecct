@@ -23,7 +23,7 @@ async function geocodeAddressViaBackend(address) {
  */
 async function fetchShelters() {
   try {
-    const search = document.getElementById("search")?.value || "";f
+    const search = document.getElementById("search")?.value || "";
     const status = document.getElementById("filter-status")?.value || "";
     const maxDist = parseFloat(document.getElementById("filter-distance")?.value || "0");
     const form = document.getElementById("filter-form");
@@ -55,6 +55,7 @@ async function fetchShelters() {
     const res = await fetch(`/api/shelters?${params}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
+
     if (!res.ok) {
       if (res.status === 401) {
         console.warn("[fetchShelters] Unauthorized, redirecting to login");
@@ -62,12 +63,13 @@ async function fetchShelters() {
       }
       throw new Error(`API error: ${res.status}`);
     }
+
     const shelters = await res.json() || [];
-    console.log("[fetchShelters] Shelters:", shelters.length, shelters[0]);
+    console.log("[fetchShelters] Shelters:", shelters.length, shelters[0] || "なし");
     updateShelterList(shelters);
     updateMap(shelters);
-    updateAdminShelterList(shelters); // 管理者リストも更新
-    updateAdminMap(shelters); // 管理者マップも更新
+    updateAdminShelterList(shelters);
+    updateAdminMap(shelters);
   } catch (e) {
     console.error("[fetchShelters] Error:", e.message);
     updateShelterList([]);
@@ -76,6 +78,7 @@ async function fetchShelters() {
     updateAdminMap([]);
   }
 }
+
 
 /**
  * 避難所リストを描画

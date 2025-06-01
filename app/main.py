@@ -1274,7 +1274,6 @@ async def get_tsunami_alerts(
     lat: float = Query(...),
     lon: float = Query(...)
 ):
-    # 位置から都道府県取得（既存の reverse-geocode 流用）
     geo = await get_reverse_geocode(lat, lon)
     prefecture = geo.get("prefecture", "")
 
@@ -1283,7 +1282,7 @@ async def get_tsunami_alerts(
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url)
             res.raise_for_status()
-            data = res.json()
+            data = await res.json()  # ✅ 修正ポイント
 
         relevant = []
         for area in data.get("areaTypes", []):
@@ -1298,7 +1297,9 @@ async def get_tsunami_alerts(
         return {"tsunami_alerts": relevant}
 
     except Exception as e:
+        print(f"[津波APIエラー] {str(e)}")  # ✅ ログに出すと Render でも確認できる
         raise HTTPException(status_code=500, detail=f"津波データ取得に失敗: {str(e)}")
+
 
 
 # ルートページ
