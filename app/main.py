@@ -1210,44 +1210,27 @@ PREF_CODE_MAP = {
 }
 
 
-import httpx
-import xmltodict
-from fastapi import APIRouter, Query, HTTPException
-from typing import Dict
-
-router = APIRouter()
-
-
-async def get_reverse_geocode(lat: float, lon: float) -> Dict[str, str]:
+def get_prefecture_code(lat: float, lon: float) -> str:
     url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-    headers = {"User-Agent": "SafeShelterApp/1.0 (your_email@example.com)"}
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        res = await client.get(url, headers=headers)
-        res.raise_for_status()
-        data = await res.json()
-        address = data.get("address", {})
-        return {
-            "prefecture": address.get("state", ""),
-            "city": address.get("city", "") or address.get("town", "") or address.get("village", "")
-        }
+    res = requests.get(url, headers={"User-Agent": "smart-shelter"})
+    data = res.json()
+    prefecture = data.get("address", {}).get("province") or data.get("address", {}).get("state")
+    return PREF_CODE_MAP.get(prefecture, "080000")  # 見つからない場合は茨城県コードを返す
 
 
-async def get_prefecture_code(lat: float, lon: float) -> str:
-    geo = await get_reverse_geocode(lat, lon)
-    prefecture = geo.get("prefecture", "")
-    return PREF_CODE_MAP.get(prefecture, "080000")  # 見つからなければ茨城県コード
+@app.get("/api/disaster-alerts")
+async def get_disaster_alerts(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude")
+):
+    prefecture_code = get_prefecture_code(lat, lon)
+    jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
 
-
-@router.get("/api/disaster-alerts")
-async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
-        prefecture_code = await get_prefecture_code(lat, lon)
-        jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
-
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(jma_url)
             res.raise_for_status()
-            jma_data = await res.json()
+            jma_data = res.json()
 
         alerts = []
         for series in jma_data.get("timeSeries", []):
@@ -1264,38 +1247,40 @@ async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
 
 
-@router.get("/api/quake-alerts")
+@app.get("/api/quake-alerts")
 async def get_quake_alerts():
     try:
         url = "https://www.jma.go.jp/bosai/quake/data/list.json"
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url)
             res.raise_for_status()
-            data = await res.json()
-
+            data = res.json()
+        
         if not data:
             return {"quakes": []}
-
-        latest = data[0]
+        
+        latest = data[0]  # 最新の1件のみ
         return {
             "quakes": [{
                 "time": latest.get("time"),
                 "place": latest.get("hypoCenter", {}).get("name"),
-                "maxScale": latest.get("maxScale")
+                "maxScale": latest.get("maxScale")  # 震度（整数：10=1, 20=2, ..., 70=7）
             }]
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"地震データ取得に失敗: {str(e)}")
 
-
+# 津波警報 API
 @router.get("/api/tsunami-alerts")
 async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
+        # Step 1: 都道府県名取得
         geo = await get_reverse_geocode(lat, lon)
         prefecture = geo.get("prefecture", "")
         print(f"[津波API] 都道府県: {prefecture}")
 
+        # Step 2: RSSから最新津波警報リンク取得
         rss_url = "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml"
         headers = {"User-Agent": "SafeShelterApp/1.0 (your_email@example.com)"}
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1307,11 +1292,18 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
         if not isinstance(entries, list):
             entries = [entries]
 
-        tsunami_link = next((e.get("link", {}).get("@href") for e in entries if "津波警報" in e.get("title", "")), None)
+        tsunami_link = None
+        for entry in entries:
+            title = entry.get("title", "")
+            if "津波警報" in title:
+                tsunami_link = entry.get("link", {}).get("@href")
+                break
+
         if not tsunami_link:
             print("[津波API] 津波警報が見つかりません")
             return {"tsunami_alerts": []}
 
+        # Step 3: XMLを取得して解析
         async with httpx.AsyncClient(timeout=10.0) as client:
             xml_res = await client.get(tsunami_link, headers=headers)
             xml_res.raise_for_status()
@@ -1323,9 +1315,9 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
             items = [items]
 
         for item in items:
-            area_name = item.get("Name", "")
-            category = item.get("Category", {}).get("Name", "")
-            grade = item.get("MaxHeight", {}).get("Value", "不明")
+            area_name = item.get("Name")
+            category = item.get("Category", {}).get("Name")
+            grade = item.get("MaxHeight", {}).get("Value") or "不明"
 
             if prefecture and prefecture in area_name:
                 alerts.append({
@@ -1341,18 +1333,7 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
         print(f"[津波APIエラー] {e}")
         raise HTTPException(status_code=500, detail="津波情報の取得に失敗しました")
 
-async def get_reverse_geocode(lat: float, lon: float) -> dict:
-    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-    headers = {"User-Agent": "SafeShelterApp/1.0 (your_email@example.com)"}
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        res = await client.get(url, headers=headers)
-        res.raise_for_status()
-        data = res.json()
-        address = data.get("address", {})
-        return {
-            "prefecture": address.get("state", ""),
-            "city": address.get("city", "") or address.get("town", "") or address.get("village", "")
-        }
+
 
 
 
