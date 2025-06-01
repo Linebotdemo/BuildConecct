@@ -1276,17 +1276,22 @@ async def get_tsunami_alerts(
 ):
     geo = await get_reverse_geocode(lat, lon)
     prefecture = geo.get("prefecture", "")
+    print(f"[津波API] 取得した都道府県: {prefecture}")
 
     try:
         url = "https://www.jma.go.jp/bosai/tsunami/data/message.json"
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url)
             res.raise_for_status()
-            data = await res.json()  # ✅ 修正ポイント
+            data = await res.json()
 
+        print(f"[津波API] JSONキー: {list(data.keys())}")
         relevant = []
+
         for area in data.get("areaTypes", []):
+            print(f"[津波API] category: {area.get('category')}")
             for region in area.get("areas", []):
+                print(f"[津波API] 地域: {region.get('name')} / グレード: {region.get('grade')}")
                 if prefecture and prefecture in region.get("name", ""):
                     relevant.append({
                         "name": region["name"],
@@ -1294,11 +1299,13 @@ async def get_tsunami_alerts(
                         "grade": region.get("grade")
                     })
 
+        print(f"[津波API] 該当: {relevant}")
         return {"tsunami_alerts": relevant}
 
     except Exception as e:
-        print(f"[津波APIエラー] {str(e)}")  # ✅ ログに出すと Render でも確認できる
+        print(f"[津波APIエラー] {str(e)}")
         raise HTTPException(status_code=500, detail=f"津波データ取得に失敗: {str(e)}")
+
 
 
 
