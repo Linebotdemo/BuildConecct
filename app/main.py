@@ -1168,34 +1168,32 @@ def get_area_bounds(area: str):
 
 
 @app.get("/api/disaster-alerts")
-async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
+async def get_disaster_alerts(lat: float, lon: float):
+    # 県コードを算出（例: 茨城県 → 080000）
+    prefecture_code = get_prefecture_code(lat, lon)
+    jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
+    
     try:
-        # ① 逆ジオコーディングで都道府県取得
-        geo_url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json&accept-language=ja"
         async with httpx.AsyncClient(timeout=10.0) as client:
-            geo_res = await client.get(geo_url)
-            geo_data = geo_res.json()
-            prefecture = geo_data.get("address", {}).get("province")
-
-        if not prefecture:
-            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
-
-        area_code = PREF_CODE_MAP.get(prefecture)
-        if not area_code:
-            raise HTTPException(status_code=404, detail=f"{prefecture} に対応する area_code が見つかりません")
-
-        # ② 気象庁の警報データ取得
-        url = f"https://www.jma.go.jp/bosai/warning/data/warning/{area_code}.json"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url)
+            res = await client.get(jma_url)
             res.raise_for_status()
-            data = res.json()
+            jma_data = res.json()
 
-        return JSONResponse(content=data)
+        # alerts に加工する
+        alerts = []
+        for series in jma_data.get("timeSeries", []):
+            for area in series.get("areas", []):
+                alerts.append({
+                    "areas": [{"name": area.get("area", {}).get("name", "")}],
+                    "kind": series.get("warningCode", ""),
+                    "infos": [{"status": warn.get("status", "")} for warn in area.get("warnings", [])]
+                })
+
+        return {"alerts": alerts}
 
     except Exception as e:
-        logger.error("Error in get_disaster_alerts: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
+
 
 
 
