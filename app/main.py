@@ -1299,10 +1299,14 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
     try:
         geo = await get_reverse_geocode(lat, lon)
         prefecture = geo.get("prefecture", "")
-        print(f"[津波API] 都道府県: {prefecture}")
+        print(f"[津波API] 逆ジオ取得結果: {geo}")
+
+        if not prefecture:
+            print("[津波API] 都道府県の取得に失敗")
+            return {"tsunami_alerts": []}
 
         rss_url = "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml"
-        headers = {"User-Agent": "SafeShelterApp/1.0 (your_email@example.com)"}
+        headers = {"User-Agent": "SafeShelterApp/1.0 (contact@example.com)"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             rss_res = await client.get(rss_url, headers=headers)
             rss_res.raise_for_status()
@@ -1320,7 +1324,7 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
                 break
 
         if not tsunami_link:
-            print("[津波API] 津波警報が見つかりません")
+            print("[津波API] 津波警報のリンクが見つかりません")
             return {"tsunami_alerts": []}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1338,7 +1342,7 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
             category = item.get("Category", {}).get("Name")
             grade = item.get("MaxHeight", {}).get("Value") or "不明"
 
-            if prefecture and prefecture in area_name:
+            if prefecture in area_name:
                 alerts.append({
                     "name": area_name,
                     "category": category,
@@ -1353,13 +1357,14 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
         raise HTTPException(status_code=500, detail="津波情報の取得に失敗しました")
 
 
+
 async def get_reverse_geocode(lat: float, lon: float) -> dict:
     url = "https://api.geoapify.com/v1/geocode/reverse"
     params = {
         "lat": lat,
         "lon": lon,
         "lang": "ja",
-        "apiKey": GEOAPIFY_API_KEY  # ← すでにある前提
+        "apiKey": GEOAPIFY_API_KEY
     }
 
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1372,12 +1377,17 @@ async def get_reverse_geocode(lat: float, lon: float) -> dict:
         return {"prefecture": "", "city": ""}
 
     props = features[0].get("properties", {})
-    return {
-        "prefecture": props.get("state", ""),
-        "city": props.get("city") or props.get("county") or props.get("municipality") or props.get("locality") or ""
-    }
+    prefecture = props.get("state", "")
+    city = (
+        props.get("city") or
+        props.get("county") or
+        props.get("municipality") or
+        props.get("suburb") or
+        props.get("locality") or
+        ""
+    )
 
-
+    return {"prefecture": prefecture, "city": city}
 
 
 

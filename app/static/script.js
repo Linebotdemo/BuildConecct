@@ -760,58 +760,52 @@ function initMap() {
 
     console.log("[initMap] Map initialized");
 
+    // ✅ 「現在地を取得」ボタンを作成して、onclick を1回だけ定義
     const geoButton = document.createElement("button");
     geoButton.textContent = "現在地を取得";
     geoButton.className = "btn btn-primary mb-3";
-    geoButton.onclick = () => {
-const geoButton = document.createElement("button");
-geoButton.textContent = "現在地を取得";
-geoButton.className = "btn btn-primary mb-3";
 
-// 非同期クリック処理
-geoButton.onclick = async () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        userLocation = [position.coords.latitude, position.coords.longitude];
-        
-        // マーカー表示
-        L.marker(userLocation, {
-          icon: L.divIcon({ className: "user-icon", html: "📍" }),
-        })
-          .addTo(map)
-          .bindPopup("現在地")
-          .openPopup();
+    geoButton.onclick = async () => {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            userLocation = [position.coords.latitude, position.coords.longitude];
 
-        map.setView(userLocation, 12);
-        console.log("[initMap] User location:", userLocation);
+            L.marker(userLocation, {
+              icon: L.divIcon({ className: "user-icon", html: "📍" }),
+            })
+              .addTo(map)
+              .bindPopup("現在地")
+              .openPopup();
 
-        // ✅ 非同期fetchはawaitで確実に順番保証
+            map.setView(userLocation, 12);
+            console.log("[initMap] User location:", userLocation);
+
+            await fetchShelters();
+            await fetchAlerts();
+            await fetchDisasterAlerts(userLocation[0], userLocation[1]);
+          },
+          async (error) => {
+            console.warn("[initMap] Geolocation error:", error.message);
+            userLocation = [35.6762, 139.6503]; // fallback
+
+            await fetchShelters();
+            await fetchAlerts();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          }
+        );
+      } else {
+        console.warn("[initMap] Geolocation not supported");
+        userLocation = [35.6762, 139.6503];
+
         await fetchShelters();
         await fetchAlerts();
-        await fetchDisasterAlerts(userLocation[0], userLocation[1]);
-      },
-      async (error) => {
-        console.warn("[initMap] Geolocation error:", error.message);
-        userLocation = [35.6762, 139.6503]; // fallback
-
-        await fetchShelters();
-        await fetchAlerts();
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
       }
-    );
-  } else {
-    console.warn("[initMap] Geolocation not supported");
-    userLocation = [35.6762, 139.6503];
-
-    await fetchShelters();
-    await fetchAlerts();
-  }
-};
+    };
 
 // ボタンを配置
 document.querySelector(".container").prepend(geoButton);
@@ -1010,59 +1004,6 @@ async function fetchDisasterAlerts(lat, lon) {
 
 
 
-
-
-
-// 🔽 これを先に書いてください！
-const geoButton = document.createElement("button");
-geoButton.textContent = "現在地を取得";
-geoButton.className = "btn btn-primary mb-3";
-
-// ↓これがすでにある場合はその下に
-geoButton.onclick = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        userLocation = [lat, lon];
-
-        L.marker(userLocation, {
-          icon: L.divIcon({ className: "user-icon", html: "📍" }),
-        })
-          .addTo(map)
-          .bindPopup("現在地")
-          .openPopup();
-
-        map.setView(userLocation, 12);
-
-        await fetchShelters();
-        await fetchAlerts();
-        await fetchDisasterAlerts(lat, lon);
-      },
-      (error) => {
-        console.warn("[initMap] Geolocation error:", error.message);
-        userLocation = [35.6762, 139.6503]; // fallback
-        fetchShelters();
-        fetchAlerts();
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
-  } else {
-    console.warn("[initMap] Geolocation not supported");
-    userLocation = [35.6762, 139.6503];
-    fetchShelters();
-    fetchAlerts();
-  }
-};
-
-// HTML に追加してクリック発火
-document.querySelector(".container").prepend(geoButton);
-geoButton.click();
 
 
 
