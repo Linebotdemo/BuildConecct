@@ -834,7 +834,8 @@ async function fetchAlerts() {
   }
 
   const urlJMA = "https://www.jma.go.jp/bosai/hazard/data/warning/00.json";
-  const proxyUrl = /api/proxy?url=${encodeURIComponent(urlJMA)};
+  const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlJMA)}`;
+  const reverseRes = await fetch(`/api/reverse-geocode?lat=${userLocation.latitude}&lon=${userLocation.longitude}`);
   console.log("[fetchAlerts] Proxy URL:", proxyUrl);
 
   try {
