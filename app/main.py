@@ -1354,17 +1354,29 @@ async def get_tsunami_alerts(lat: float = Query(...), lon: float = Query(...)):
 
 
 async def get_reverse_geocode(lat: float, lon: float) -> dict:
-    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-    headers = {"User-Agent": "SafeShelterApp/1.0 (your_email@example.com)"}
+    url = "https://api.geoapify.com/v1/geocode/reverse"
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "lang": "ja",
+        "apiKey": GEOAPIFY_API_KEY  # ← すでにある前提
+    }
+
     async with httpx.AsyncClient(timeout=10.0) as client:
-        res = await client.get(url, headers=headers)
+        res = await client.get(url, params=params)
         res.raise_for_status()
         data = res.json()
-        address = data.get("address", {})
-        return {
-            "prefecture": address.get("state", ""),
-            "city": address.get("city", "") or address.get("town", "") or address.get("village", "")
-        }
+
+    features = data.get("features", [])
+    if not features:
+        return {"prefecture": "", "city": ""}
+
+    props = features[0].get("properties", {})
+    return {
+        "prefecture": props.get("state", ""),
+        "city": props.get("city") or props.get("county") or props.get("municipality") or props.get("locality") or ""
+    }
+
 
 
 
