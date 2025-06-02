@@ -105,6 +105,7 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 ENV = os.getenv("ENV", "production")
+GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
 
 # テンプレートディレクトリ設定
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -831,7 +832,7 @@ async def bulk_delete_shelters(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
 
-GEOAPIFY_API_KEY = "b0faad5856ad4879af9ab878c6b329d2"
+
 
 @app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
@@ -846,8 +847,8 @@ async def reverse_geocode(lat: float, lon: float):
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url, params=params)
-        res.raise_for_status()
-        data = res.json()
+            res.raise_for_status()
+            data = res.json()
 
         features = data.get("features", [])
         if not features:
@@ -865,8 +866,12 @@ async def reverse_geocode(lat: float, lon: float):
             "city": city or ""
         }
 
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"HTTPエラー: {e.response.text}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
+
+
 
 # 写真アップロード（単一、認証必要）
 @app.post("/api/shelters/upload-photo", response_model=PhotoUploadResponse)
