@@ -946,11 +946,18 @@ async function fetchDisasterAlerts(lat, lon) {
     const allAlerts = [];
 
     // --- 気象警報 ---
-    const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
-    if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
-    const alertData = await alertRes.json();
-    const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
+const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
+if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
+const alertData = await alertRes.json();
+const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
+// 🔽 ここで都道府県のバリデーション
+if (!prefecture || typeof prefecture !== "string") {
+  console.warn("[警告] 都道府県名が不正です", prefecture);
+  return;
+}
+
+// 🔽 prefecture を使ったフィルタ処理（安全）
 const relevantAlerts = alerts.filter((alert, i) => {
   if (!Array.isArray(alert.areas)) {
     console.warn(`[警告] alert[${i}].areas is not an array`, alert.areas);
@@ -967,6 +974,7 @@ const relevantAlerts = alerts.filter((alert, i) => {
 
   return hasMatch;
 });
+
 
 
 // --- 地震速報 ---
