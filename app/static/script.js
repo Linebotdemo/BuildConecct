@@ -943,64 +943,49 @@ async function fetchDisasterAlerts(lat, lon) {
     console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
     console.log("fetching disaster alerts with:", lat, lon);
 
+    const allAlerts = [];
+
     // --- 気象警報 ---
     const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
-    console.log("alertRes.ok:", alertRes.ok);
-    console.log("Content-Type:", alertRes.headers.get("content-type"));
     if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
     const alertData = await alertRes.json();
-    console.log("alertData:", alertData);
+    const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
-const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
+    const relevantAlerts = alerts.filter(alert =>
+      Array.isArray(alert.areas) &&
+      alert.areas.some(area => typeof area?.name === "string" && area.name.includes(prefecture))
+    );
 
-const relevantAlerts = alerts.filter(alert =>
-  Array.isArray(alert.areas) &&
-  alert.areas.some(area => typeof area?.name === "string" && area.name.includes(prefecture))
-);
-
-
-// 🔽 ここに追記
-console.log("Prefecture:", prefecture);
-console.log("Relevant alerts:", relevantAlerts);
-
-
-
-
-    if (relevantAlerts.length > 0) {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
-      alert(
-        `【気象警報】${prefecture}\n` +
-        relevantAlerts.map(a =>
-          `・${a.kind}：${a.infos?.map(info => info.status).join("、")}`
-        ).join("\n")
-      );
-    } else {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
+    for (const a of relevantAlerts) {
+      allAlerts.push({
+        warning_type: a.kind || "気象警報",
+        area: prefecture,
+        level: "warning",
+        description: a.infos?.map(info => info.status).join("、") || "内容不明",
+        issued_at: new Date().toISOString()
+      });
     }
 
-// --- 地震速報 ---
-try {
-  const quakeRes = await fetch("/api/quake-alerts");
-  if (quakeRes.ok) {
-    const quakeData = await quakeRes.json();
-    console.log("quakeData:", quakeData);
-    console.log("quakeData.quakes:", quakeData.quakes);
-
-    const quake = quakeData.quakes?.[0];
-    if (quake) {
-      const scale = quake.maxScale / 10;
-      console.log("[地震速報]", quake);
-      alert(`【地震速報】\n震源地: ${quake.place}\n最大震度: ${scale}`);
-    } else {
-      console.log("[地震速報] 該当する地震なし");
+    // --- 地震速報 ---
+    try {
+      const quakeRes = await fetch("/api/quake-alerts");
+      if (quakeRes.ok) {
+        const quakeData = await quakeRes.json();
+        const quake = quakeData.quakes?.[0];
+        if (quake) {
+          const scale = quake.maxScale / 10;
+          allAlerts.push({
+            warning_type: "地震速報",
+            area: quake.place || "不明",
+            level: "alert",
+            description: `最大震度: ${scale}`,
+            issued_at: quake.time || new Date().toISOString()
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[地震速報] エラー:", e.message);
     }
-  } else {
-    console.warn("[地震速報] API呼び出し失敗");
-  }
-} catch (e) {
-  console.error("[地震速報] エラー:", e.message);
-}
-
 
     // --- 津波警報 ---
     const tsunamiRes = await fetch(`/api/tsunami-alerts?lat=${lat}&lon=${lon}`);
@@ -1008,19 +993,24 @@ try {
       const tsunamiData = await tsunamiRes.json();
       const tsunamiAlerts = tsunamiData.tsunami_alerts || [];
 
-      console.log("[津波警報]", tsunamiAlerts);
-
-      if (tsunamiAlerts.length > 0) {
-        const message = tsunamiAlerts.map(a =>
-          `・${a.name}：${a.category}（${a.grade}）`
-        ).join("\n");
-
-        alert(`【津波警報】${prefecture}\n${message}`);
+      for (const t of tsunamiAlerts) {
+        allAlerts.push({
+          warning_type: "津波警報",
+          area: t.name || prefecture,
+          level: "alert",
+          description: `${t.category}（${t.grade}）`,
+          issued_at: new Date().toISOString()
+        });
       }
     }
 
+    // 最終表示
+    updateAlertSection(allAlerts, false);
+    updateMapAlerts(allAlerts);
   } catch (err) {
     console.error("[fetchDisasterAlerts エラー]", err);
+    updateAlertSection([], true);
+    updateMapAlerts([]);
   }
 }
 
