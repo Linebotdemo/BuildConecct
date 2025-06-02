@@ -951,11 +951,12 @@ async function fetchDisasterAlerts(lat, lon) {
     const alertData = await alertRes.json();
     console.log("alertData:", alertData);
 
-    const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
-    const relevantAlerts = alerts.filter(alert =>
-      Array.isArray(alert.areas) &&
-      alert.areas && alert.areas.some(area => (area?.name || "").includes(prefecture)
-    );
+const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
+const relevantAlerts = alerts.filter(alert =>
+  Array.isArray(alert.areas) &&
+  alert.areas.some(area => (area?.name || "").includes(prefecture))
+);
+
 
     if (relevantAlerts.length > 0) {
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
