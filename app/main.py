@@ -836,7 +836,6 @@ async def bulk_delete_shelters(
 
 @app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
-    logger.info(f"GEOAPIFY_API_KEY: {GEOAPIFY_API_KEY}")
     url = "https://api.geoapify.com/v1/geocode/reverse"
     params = {
         "lat": lat,
@@ -848,8 +847,10 @@ async def reverse_geocode(lat: float, lon: float):
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             res = await client.get(url, params=params)
-            res.raise_for_status()
-            data = res.json()
+        res.raise_for_status()
+        data = res.json()
+
+        logger.info(f"Geoapify response: {json.dumps(data, ensure_ascii=False)}")
 
         features = data.get("features", [])
         if not features:
@@ -857,18 +858,23 @@ async def reverse_geocode(lat: float, lon: float):
 
         prop = features[0].get("properties", {})
         prefecture = prop.get("state", "")
-        city = prop.get("city", "") or prop.get("county", "") or prop.get("municipality", "")
+        city = (
+            prop.get("city") or
+            prop.get("county") or
+            prop.get("municipality") or
+            prop.get("suburb") or
+            prop.get("locality") or
+            ""
+        )
 
         if not prefecture:
             raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
 
         return {
             "prefecture": prefecture,
-            "city": city or ""
+            "city": city
         }
 
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"HTTPエラー: {e.response.text}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
 
