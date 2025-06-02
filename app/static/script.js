@@ -951,9 +951,7 @@ if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
 const alertData = await alertRes.json();
 const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
-// デバッグ：prefectureの中身を確認
-console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
-
+// ↓↓↓ この下に貼る！ ↓↓↓
 if (!prefecture || typeof prefecture !== "string") {
   console.warn("[警告] 都道府県名が不正です", prefecture);
   return;
@@ -961,19 +959,21 @@ if (!prefecture || typeof prefecture !== "string") {
 
 const relevantAlerts = alerts.filter((alert, i) => {
   if (!Array.isArray(alert.areas)) {
-    console.warn(`[警告] alert[${i}].areas is not an array`, alert.areas);
+    console.warn(`[警告] alert[${i}].areas is not an array`, alert);
     return false;
   }
 
   return alert.areas.some((area, j) => {
-    const validName = area && typeof area.name === "string";
-    if (!validName) {
-      console.warn(`[警告] alert[${i}].areas[${j}].name が不正`, area);
+    if (!area || typeof area.name !== "string") {
+      console.warn(`[警告] alert[${i}].areas[${j}].name is invalid`, area);
       return false;
     }
     return area.name.includes(prefecture);
   });
 });
+
+console.log("Prefecture:", prefecture);
+console.log("Relevant alerts:", relevantAlerts);
 
 
 
