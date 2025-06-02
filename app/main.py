@@ -1233,16 +1233,18 @@ PREF_CODE_MAP = {
 }
 
 
-def get_prefecture_code(lat: float, lon: float) -> str:
+async def get_prefecture_code(lat: float, lon: float) -> str:
     GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
     if not GEOAPIFY_API_KEY:
         raise HTTPException(status_code=500, detail="Geoapify API key is not set")
 
     url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&lang=ja&apiKey={GEOAPIFY_API_KEY}"
     headers = {"User-Agent": "smart-shelter"}
-    res = requests.get(url, headers=headers)
-    res.raise_for_status()
-    data = res.json()
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res = await client.get(url, headers=headers)
+        res.raise_for_status()
+        data = res.json()
 
     try:
         return data["features"][0]["properties"]["state"]
@@ -1251,13 +1253,16 @@ def get_prefecture_code(lat: float, lon: float) -> str:
 
 
 
+
 @app.get("/api/disaster-alerts")
-async def get_disaster_alerts(
-    lat: float = Query(...),
-    lon: float = Query(...)
-):
-    prefecture = get_prefecture_code(lat, lon)  # 例: 茨城
-    jma_url = "https://www.jma.go.jp/bosai/warning/data/warning/00.json"
+async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
+    prefecture_name = await get_prefecture_code(lat, lon)
+    prefecture_code = PREF_CODE_MAP.get(prefecture_name)
+
+    if not prefecture_code:
+        raise HTTPException(status_code=400, detail=f"{prefecture_name} のJMAコードが見つかりません")
+
+    jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1269,7 +1274,7 @@ async def get_disaster_alerts(
         for area_type in jma_data.get("areaTypes", []):
             for area in area_type.get("areas", []):
                 area_name = area.get("name", "")
-                if prefecture not in area_name:
+                if prefecture_name.replace("県", "").replace("府", "").replace("都", "") not in area_name:
                     continue
                 for warn in area.get("warnings", []):
                     if warn.get("status") == "解除":
