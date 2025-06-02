@@ -991,10 +991,20 @@ async function fetchDisasterAlerts(lat, lon) {
 }
 
 
+
+
+
+
+// 🔽 これを先に書いてください！
+const geoButton = document.createElement("button");
+geoButton.textContent = "現在地を取得";
+geoButton.className = "btn btn-primary mb-3";
+
+// ↓これがすでにある場合はその下に
 geoButton.onclick = () => {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
-      async (position) => { // ←ここを async にする
+      async (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
         userLocation = [lat, lon];
@@ -1008,14 +1018,13 @@ geoButton.onclick = () => {
 
         map.setView(userLocation, 12);
 
-        // 非同期関数を await で呼び出し可能になる
         await fetchShelters();
         await fetchAlerts();
         await fetchDisasterAlerts(lat, lon);
       },
       (error) => {
         console.warn("[initMap] Geolocation error:", error.message);
-        userLocation = [35.6762, 139.6503]; // Fallback: 東京
+        userLocation = [35.6762, 139.6503]; // fallback
         fetchShelters();
         fetchAlerts();
       },
@@ -1032,6 +1041,11 @@ geoButton.onclick = () => {
     fetchAlerts();
   }
 };
+
+// HTML に追加してクリック発火
+document.querySelector(".container").prepend(geoButton);
+geoButton.click();
+
 
 
 
