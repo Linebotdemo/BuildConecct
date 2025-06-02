@@ -158,6 +158,7 @@ http_client = httpx.AsyncClient(timeout=10.0)
 
 
 
+
 # スタートアップイベント
 @app.on_event("startup")
 async def on_startup():
