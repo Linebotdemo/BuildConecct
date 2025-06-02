@@ -1256,8 +1256,9 @@ async def get_disaster_alerts(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude")
 ):
-    prefecture_code = get_prefecture_code(lat, lon)
-    jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
+    # 都道府県名を取得（例：茨城）
+    prefecture = get_prefecture_code(lat, lon)
+    jma_url = "https://www.jma.go.jp/bosai/warning/data/warning/00.json"
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -1266,15 +1267,23 @@ async def get_disaster_alerts(
             jma_data = res.json()
 
         alerts = []
-        for series in jma_data.get("timeSeries", []):
-            for area in series.get("areas", []):
-                alerts.append({
-                    "areas": [{"name": area.get("area", {}).get("name", "")}],
-                    "kind": series.get("warningCode", ""),
-                    "infos": [{"status": warn.get("status", "")} for warn in area.get("warnings", [])]
-                })
+        area_types = jma_data.get("areaTypes", [])
+        for area_type in area_types:
+            for area in area_type.get("areas", []):
+                area_name = area.get("name", "")
+                if prefecture not in area_name:
+                    continue
+                for warn in area.get("warnings", []):
+                    if warn.get("status") == "解除":
+                        continue
+                    alerts.append({
+                        "area": area_name,
+                        "type": warn.get("kind", {}).get("name", ""),
+                        "status": warn.get("status", ""),
+                        "issued": warn.get("issued", "")
+                    })
 
-        return {"alerts": alerts or []}
+        return {"alerts": alerts}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
