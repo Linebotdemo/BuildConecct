@@ -1253,11 +1253,10 @@ def get_prefecture_code(lat: float, lon: float) -> str:
 
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(
-    lat: float = Query(..., description="Latitude"),
-    lon: float = Query(..., description="Longitude")
+    lat: float = Query(...),
+    lon: float = Query(...)
 ):
-    # 都道府県名を取得（例：茨城）
-    prefecture = get_prefecture_code(lat, lon)
+    prefecture = get_prefecture_code(lat, lon)  # 例: 茨城
     jma_url = "https://www.jma.go.jp/bosai/warning/data/warning/00.json"
 
     try:
@@ -1267,8 +1266,7 @@ async def get_disaster_alerts(
             jma_data = res.json()
 
         alerts = []
-        area_types = jma_data.get("areaTypes", [])
-        for area_type in area_types:
+        for area_type in jma_data.get("areaTypes", []):
             for area in area_type.get("areas", []):
                 area_name = area.get("name", "")
                 if prefecture not in area_name:
@@ -1287,6 +1285,7 @@ async def get_disaster_alerts(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
+
 
 
 @app.get("/api/quake-alerts")
