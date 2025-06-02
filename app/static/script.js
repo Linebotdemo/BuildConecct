@@ -966,26 +966,34 @@ async function fetchDisasterAlerts(lat, lon) {
       });
     }
 
-    // --- 地震速報 ---
-    try {
-      const quakeRes = await fetch("/api/quake-alerts");
-      if (quakeRes.ok) {
-        const quakeData = await quakeRes.json();
-        const quake = quakeData.quakes?.[0];
-        if (quake) {
-          const scale = quake.maxScale / 10;
-          allAlerts.push({
-            warning_type: "地震速報",
-            area: quake.place || "不明",
-            level: "alert",
-            description: `最大震度: ${scale}`,
-            issued_at: quake.time || new Date().toISOString()
-          });
-        }
-      }
-    } catch (e) {
-      console.error("[地震速報] エラー:", e.message);
+// --- 地震速報 ---
+try {
+  const quakeRes = await fetch("/api/quake-alerts");
+  if (quakeRes.ok) {
+    const quakeData = await quakeRes.json();
+    const quake = quakeData.quakes?.[0];
+
+    if (quake && quake.place && quake.maxScale !== null && quake.maxScale > 0) {
+      const scale = quake.maxScale / 10;
+      console.log("[地震速報]", quake);
+
+      allAlerts.push({
+        warning_type: "地震速報",
+        area: quake.place,
+        level: "alert",
+        description: `最大震度: ${scale}`,
+        issued_at: quake.time || new Date().toISOString()
+      });
+    } else {
+      console.log("[地震速報] 有効な地震データなし");
     }
+  } else {
+    console.warn("[地震速報] API呼び出し失敗");
+  }
+} catch (e) {
+  console.error("[地震速報] エラー:", e.message);
+}
+
 
     // --- 津波警報 ---
     const tsunamiRes = await fetch(`/api/tsunami-alerts?lat=${lat}&lon=${lon}`);
