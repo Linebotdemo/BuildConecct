@@ -991,19 +991,26 @@ async function fetchDisasterAlerts(lat, lon) {
 }
 
 
+geoButton.onclick = () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => { // ←ここを async にする
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        userLocation = [lat, lon];
 
-        // マップ表示
         L.marker(userLocation, {
           icon: L.divIcon({ className: "user-icon", html: "📍" }),
         })
           .addTo(map)
           .bindPopup("現在地")
           .openPopup();
+
         map.setView(userLocation, 12);
 
-        // 各種情報取得
+        // 非同期関数を await で呼び出し可能になる
         await fetchShelters();
-        await fetchAlerts(); // ←この中で userLat, userLon を使うようにする
+        await fetchAlerts();
         await fetchDisasterAlerts(lat, lon);
       },
       (error) => {
@@ -1025,6 +1032,7 @@ async function fetchDisasterAlerts(lat, lon) {
     fetchAlerts();
   }
 };
+
 
 
 
