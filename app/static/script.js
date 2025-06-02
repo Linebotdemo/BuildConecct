@@ -991,19 +991,6 @@ async function fetchDisasterAlerts(lat, lon) {
 }
 
 
-    // 位置情報ボタン
-geoButton.onclick = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-
-        window.userLat = lat;
-        window.userLon = lon;
-        userLocation = [lat, lon];
-
-        console.log("[initMap] User location:", lat, lon);
 
         // マップ表示
         L.marker(userLocation, {
