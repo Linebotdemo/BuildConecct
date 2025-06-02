@@ -836,6 +836,7 @@ async def bulk_delete_shelters(
 
 @app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
+    logger.info(f"GEOAPIFY_API_KEY: {GEOAPIFY_API_KEY}")
     url = "https://api.geoapify.com/v1/geocode/reverse"
     params = {
         "lat": lat,
