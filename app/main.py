@@ -37,6 +37,7 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
 from fastapi import Query, HTTPException
+om fastapi import FastAPI, HTTPException
 import httpx
 import xml.etree.ElementTree as ET
 logging.basicConfig(level=logging.DEBUG)
@@ -832,13 +833,13 @@ async def bulk_delete_shelters(
 
 GEOAPIFY_API_KEY = "b0faad5856ad4879af9ab878c6b329d2"
 
-@router.get("/api/reverse-geocode")
+@app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
     url = "https://api.geoapify.com/v1/geocode/reverse"
     params = {
         "lat": lat,
         "lon": lon,
-        "lang": "ja",  # 日本語で取得
+        "lang": "ja",
         "apiKey": GEOAPIFY_API_KEY
     }
 
@@ -866,8 +867,6 @@ async def reverse_geocode(lat: float, lon: float):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
-
-
 
 
 # 写真アップロード（単一、認証必要）
@@ -1535,7 +1534,7 @@ async def favicon():
         logger.error("Error serving favicon: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"ファビコン取得に失敗しました: {str(e)}")
 
-app.include_router(router)
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10000)
