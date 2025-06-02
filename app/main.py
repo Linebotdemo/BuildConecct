@@ -805,10 +805,10 @@ async def bulk_update_shelters(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括更新に失敗しました: {str(e)}")
 
-# 一括削除（認証必要）
-@app.post("/api/shelters/bulk-delete")
+# ✅ 一括削除（認証必要） DELETE対応 + Body受け取り
+@app.delete("/api/shelters/bulk-delete")
 async def bulk_delete_shelters(
-    shelter_ids: List[int],
+    shelter_ids: List[int] = Body(...),
     db: Session = Depends(get_db),
     current_user: CompanyModel = Depends(get_current_user),
 ):
@@ -833,7 +833,6 @@ async def bulk_delete_shelters(
         logger.error("Error in bulk_delete_shelters: %s\n%s", str(e), traceback.format_exc())
         db.rollback()
         raise HTTPException(status_code=500, detail=f"一括削除に失敗しました: {str(e)}")
-
 
 
 @app.get("/api/reverse-geocode")
