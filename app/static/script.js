@@ -951,9 +951,21 @@ async function fetchDisasterAlerts(lat, lon) {
     const alertData = await alertRes.json();
     const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
-const relevantAlerts = alerts.filter(alert => {
-  if (!Array.isArray(alert.areas)) return false;
-  return alert.areas.some(area => area && typeof area.name === "string" && area.name.includes(prefecture));
+const relevantAlerts = alerts.filter((alert, i) => {
+  if (!Array.isArray(alert.areas)) {
+    console.warn(`[警告] alert[${i}].areas is not an array`, alert.areas);
+    return false;
+  }
+
+  const hasMatch = alert.areas.some((area, j) => {
+    const valid = area && typeof area.name === "string";
+    if (!valid) {
+      console.warn(`[警告] alert[${i}].areas[${j}] has invalid name`, area);
+    }
+    return valid && area.name.includes(prefecture);
+  });
+
+  return hasMatch;
 });
 
 
