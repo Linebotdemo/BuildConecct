@@ -380,7 +380,7 @@ function updateAlertSection(alerts, hadError = false) {
   }
 
   if (hadError) {
-    elem.innerHTML = '<p class="alert-error">⚠️ 警報情報の取得に失敗しました。</p>';
+    elem.innerHTML = '<p class="alert-error">⚠️ 警報情報の取得中です。</p>';
     return;
   }
 
@@ -951,10 +951,11 @@ async function fetchDisasterAlerts(lat, lon) {
     const alertData = await alertRes.json();
     const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
-    const relevantAlerts = alerts.filter(alert =>
-      Array.isArray(alert.areas) &&
-      alert.areas.some(area => typeof area?.name === "string" && area.name.includes(prefecture))
-    );
+const relevantAlerts = alerts.filter(alert => {
+  if (!Array.isArray(alert.areas)) return false;
+  return alert.areas.some(area => area && typeof area.name === "string" && area.name.includes(prefecture));
+});
+
 
     for (const a of relevantAlerts) {
       allAlerts.push({
