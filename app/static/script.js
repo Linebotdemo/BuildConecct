@@ -954,7 +954,7 @@ async function fetchDisasterAlerts(lat, lon) {
     const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
     const relevantAlerts = alerts.filter(alert =>
       Array.isArray(alert.areas) &&
-      alert.areas.some(area => area?.name?.includes(prefecture))
+      alert.areas && alert.areas.some(area => area.name && area.name.includes(prefecture))
     );
 
     if (relevantAlerts.length > 0) {
