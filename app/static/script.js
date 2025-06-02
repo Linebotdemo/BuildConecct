@@ -835,22 +835,21 @@ async function fetchAlerts() {
 
   const urlJMA = "https://www.jma.go.jp/bosai/hazard/data/warning/00.json";
   const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlJMA)}`;
-  const reverseRes = await fetch(`/api/reverse-geocode?lat=${userLocation.latitude}&lon=${userLocation.longitude}`);
   console.log("[fetchAlerts] Proxy URL:", proxyUrl);
 
   try {
     // ① 警報データ取得
     const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error(JMA API error: ${res.status});
+    if (!res.ok) throw new Error(`JMA API error: ${res.status}`);
     const jsonData = await res.json();
     console.log("[fetchAlerts] JSON keys:", Object.keys(jsonData));
 
     // ② ユーザー都道府県・市取得
-    const reverseRes = await fetch(/api/reverse-geocode?lat=${userLocation.latitude}&lon=${userLocation.longitude});
+    const reverseRes = await fetch(`/api/reverse-geocode?lat=${userLocation.latitude}&lon=${userLocation.longitude}`);
     const reverseData = await reverseRes.json();
     const userPref = reverseData.prefecture;
     const userCity = reverseData.city;
-    console.log([fetchAlerts] User Pref: ${userPref}, City: ${userCity});
+    console.log(`[fetchAlerts] User Pref: ${userPref}, City: ${userCity}`);
 
     // ③ 地方名マッピング
     const regionMap = {
@@ -868,8 +867,8 @@ async function fetchAlerts() {
       "沖縄": "沖縄地方"
     };
 
-    const region = regionMap[userPref.replace("県", "").replace("府", "").replace("都", "").replace("道", "")] || "";
-    console.log([fetchAlerts] 推定地方名: ${region});
+    const region = regionMap[userPref.replace(/(都|道|府|県)/g, "")] || "";
+    console.log(`[fetchAlerts] 推定地方名: ${region}`);
 
     // ④ 警報エリアを絞り込み（都道府県名または地方名に一致）
     const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
@@ -893,15 +892,16 @@ async function fetchAlerts() {
             warning_type: w.kind.name,
             description: w.kind.name,
             issued_at: w.issued,
-            level: w.kind.name.includes("特別") ? "特別警報" : w.kind.name.includes("警報") ? "警報" : "注意報",
-            polygon: area.polygon || null,
+            level: w.kind.name.includes("特別") ? "特別警報" :
+                   w.kind.name.includes("警報") ? "警報" : "注意報",
+            polygon: area.polygon || null
           });
         });
     });
 
-    console.log([fetchAlerts] 検出された警報数: ${alerts.length});
+    console.log(`[fetchAlerts] 検出された警報数: ${alerts.length}`);
     alerts.forEach((a, i) => {
-      console.log(  [${i}] 地域: ${a.area}, 警報: ${a.warning_type});
+      console.log(`[${i}] 地域: ${a.area}, 警報: ${a.warning_type}`);
     });
 
     localStorage.setItem("alerts", JSON.stringify(alerts));
