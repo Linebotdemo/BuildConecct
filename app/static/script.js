@@ -951,29 +951,30 @@ if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
 const alertData = await alertRes.json();
 const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
-// 🔽 ここで都道府県のバリデーション
+// デバッグ：prefectureの中身を確認
+console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
+
 if (!prefecture || typeof prefecture !== "string") {
   console.warn("[警告] 都道府県名が不正です", prefecture);
   return;
 }
 
-// 🔽 prefecture を使ったフィルタ処理（安全）
 const relevantAlerts = alerts.filter((alert, i) => {
   if (!Array.isArray(alert.areas)) {
     console.warn(`[警告] alert[${i}].areas is not an array`, alert.areas);
     return false;
   }
 
-  const hasMatch = alert.areas.some((area, j) => {
-    const valid = area && typeof area.name === "string";
-    if (!valid) {
-      console.warn(`[警告] alert[${i}].areas[${j}] has invalid name`, area);
+  return alert.areas.some((area, j) => {
+    const validName = area && typeof area.name === "string";
+    if (!validName) {
+      console.warn(`[警告] alert[${i}].areas[${j}].name が不正`, area);
+      return false;
     }
-    return valid && area.name.includes(prefecture);
+    return area.name.includes(prefecture);
   });
-
-  return hasMatch;
 });
+
 
 
 
