@@ -37,7 +37,7 @@ from fastapi import Query
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
 from fastapi import Query, HTTPException
-om fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 import httpx
 import xml.etree.ElementTree as ET
 logging.basicConfig(level=logging.DEBUG)
