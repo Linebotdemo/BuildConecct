@@ -1234,11 +1234,21 @@ PREF_CODE_MAP = {
 
 
 def get_prefecture_code(lat: float, lon: float) -> str:
-    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json"
-    res = requests.get(url, headers={"User-Agent": "smart-shelter"})
+    GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
+    if not GEOAPIFY_API_KEY:
+        raise HTTPException(status_code=500, detail="Geoapify API key is not set")
+
+    url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&lang=ja&apiKey={GEOAPIFY_API_KEY}"
+    headers = {"User-Agent": "smart-shelter"}
+    res = requests.get(url, headers=headers)
+    res.raise_for_status()
     data = res.json()
-    prefecture = data.get("address", {}).get("province") or data.get("address", {}).get("state")
-    return PREF_CODE_MAP.get(prefecture, "080000")  # 見つからない場合は茨城県コードを返す
+
+    try:
+        return data["features"][0]["properties"]["state"]
+    except (IndexError, KeyError):
+        raise HTTPException(status_code=500, detail="都道府県コード取得に失敗しました")
+
 
 
 @app.get("/api/disaster-alerts")
