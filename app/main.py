@@ -84,7 +84,7 @@ from schemas import (
 # --- 企業周りのRouter ---
 from utils import router as company_router
 app = FastAPI()
-router = APIRouter()
+
 
 
 # FastAPI アプリケーション
@@ -867,7 +867,6 @@ async def reverse_geocode(lat: float, lon: float):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
-
 
 # 写真アップロード（単一、認証必要）
 @app.post("/api/shelters/upload-photo", response_model=PhotoUploadResponse)
