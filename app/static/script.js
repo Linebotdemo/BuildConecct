@@ -366,100 +366,7 @@ async function updateAdminMapPin(shelterId, address) {
 /**
  * 警報を取得
  */
-async function fetchAlerts() {
-  let hadError = false;
-  let alerts = [];
 
-  if (!userLocation) {
-    hadError = true;
-    updateAlertSection([], true);
-    updateMapAlerts([]);
-    console.log("[fetchAlerts] No userLocation");
-    return;
-  }
-
-  const urlJMA = "https://www.jma.go.jp/bosai/hazard/data/warning/00.json";
-  const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlJMA)}`;
-  console.log("[fetchAlerts] Proxy URL:", proxyUrl);
-
-  try {
-    // ① 警報データ取得
-    const res = await fetch(proxyUrl);
-    if (!res.ok) throw new Error(`JMA API error: ${res.status}`);
-    const jsonData = await res.json();
-    console.log("[fetchAlerts] JSON keys:", Object.keys(jsonData));
-
-    // ② ユーザー都道府県・市取得
-    const reverseRes = await fetch(`/api/reverse-geocode?lat=${userLocation.latitude}&lon=${userLocation.longitude}`);
-    const reverseData = await reverseRes.json();
-    const userPref = reverseData.prefecture;
-    const userCity = reverseData.city;
-    console.log(`[fetchAlerts] User Pref: ${userPref}, City: ${userCity}`);
-
-    // ③ 地方名マッピング
-    const regionMap = {
-      "北海道": "北海道地方",
-      "青森": "東北地方", "岩手": "東北地方", "宮城": "東北地方", "秋田": "東北地方", "山形": "東北地方", "福島": "東北地方",
-      "茨城": "関東地方", "栃木": "関東地方", "群馬": "関東地方", "埼玉": "関東地方", "千葉": "関東地方", "東京": "関東地方", "神奈川": "関東地方",
-      "新潟": "北陸地方", "富山": "北陸地方", "石川": "北陸地方", "福井": "北陸地方",
-      "山梨": "甲信地方", "長野": "甲信地方",
-      "岐阜": "東海地方", "静岡": "東海地方", "愛知": "東海地方", "三重": "東海地方",
-      "滋賀": "近畿地方", "京都": "近畿地方", "大阪": "近畿地方", "兵庫": "近畿地方", "奈良": "近畿地方", "和歌山": "近畿地方",
-      "鳥取": "中国地方", "島根": "中国地方", "岡山": "中国地方", "広島": "中国地方", "山口": "中国地方",
-      "徳島": "四国地方", "香川": "四国地方", "愛媛": "四国地方", "高知": "四国地方",
-      "福岡": "九州北部地方", "佐賀": "九州北部地方", "長崎": "九州北部地方", "熊本": "九州北部地方", "大分": "九州北部地方",
-      "宮崎": "九州南部地方", "鹿児島": "九州南部地方",
-      "沖縄": "沖縄地方"
-    };
-
-    const region = regionMap[userPref.replace("県", "").replace("府", "").replace("都", "").replace("道", "")] || "";
-    console.log(`[fetchAlerts] 推定地方名: ${region}`);
-
-    // ④ 警報エリアを絞り込み（都道府県名または地方名に一致）
-    const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
-    console.log("[fetchAlerts] 全エリア数:", areas.length);
-
-    areas.forEach((area) => {
-      if (!area.warnings) return;
-
-      const areaName = area.name;
-      const matchByPref = areaName.includes(userPref);
-      const matchByRegion = region && areaName.includes(region);
-      const isMatch = matchByPref || matchByRegion;
-
-      if (!isMatch) return;
-
-      area.warnings
-        .filter(w => w.status !== "解除")
-        .forEach(w => {
-          alerts.push({
-            area: area.name,
-            warning_type: w.kind.name,
-            description: w.kind.name,
-            issued_at: w.issued,
-            level: w.kind.name.includes("特別") ? "特別警報" : w.kind.name.includes("警報") ? "警報" : "注意報",
-            polygon: area.polygon || null,
-          });
-        });
-    });
-
-    console.log(`[fetchAlerts] 検出された警報数: ${alerts.length}`);
-    alerts.forEach((a, i) => {
-      console.log(`  [${i}] 地域: ${a.area}, 警報: ${a.warning_type}`);
-    });
-
-    localStorage.setItem("alerts", JSON.stringify(alerts));
-  } catch (e) {
-    hadError = true;
-    console.error("[fetchAlerts] エラー:", e.message);
-    updateAlertSection([], true);
-    updateMapAlerts([]);
-    return;
-  }
-
-  updateAlertSection(alerts, hadError);
-  updateMapAlerts(hadError ? [] : alerts);
-}
 
 
 /**
@@ -914,47 +821,109 @@ function initMap() {
 }
 
 
-async function fetchDisasterAlerts(lat, lon) {
+
+async function fetchUnifiedDisasterAlerts() {
+  let hadError = false;
+  let alerts = [];
+
+  if (!userLocation) {
+    hadError = true;
+    updateAlertSection([], true);
+    updateMapAlerts([]);
+    console.log("[fetchUnifiedDisasterAlerts] No userLocation");
+    return;
+  }
+
+  const { latitude: lat, longitude: lon } = userLocation;
+  console.log("[fetchUnifiedDisasterAlerts] Location:", lat, lon);
+
+  // --- ① 位置情報取得 ---
+  const geoRes = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
+  const geoData = await geoRes.json();
+  const userPref = geoData.prefecture;
+  const userCity = geoData.city;
+
+  if (!userPref) {
+    console.warn("[fetchUnifiedDisasterAlerts] 都道府県名が取得できませんでした");
+    return;
+  }
+  console.log("[fetchUnifiedDisasterAlerts] Prefecture:", userPref, "City:", userCity);
+
+  // --- ② 地方名マッピング ---
+  const regionMap = {
+    "北海道": "北海道地方",
+    "青森": "東北地方", "岩手": "東北地方", "宮城": "東北地方", "秋田": "東北地方", "山形": "東北地方", "福島": "東北地方",
+    "茨城": "関東地方", "栃木": "関東地方", "群馬": "関東地方", "埼玉": "関東地方", "千葉": "関東地方", "東京": "関東地方", "神奈川": "関東地方",
+    "新潟": "北陸地方", "富山": "北陸地方", "石川": "北陸地方", "福井": "北陸地方",
+    "山梨": "甲信地方", "長野": "甲信地方",
+    "岐阜": "東海地方", "静岡": "東海地方", "愛知": "東海地方", "三重": "東海地方",
+    "滋賀": "近畿地方", "京都": "近畿地方", "大阪": "近畿地方", "兵庫": "近畿地方", "奈良": "近畿地方", "和歌山": "近畿地方",
+    "鳥取": "中国地方", "島根": "中国地方", "岡山": "中国地方", "広島": "中国地方", "山口": "中国地方",
+    "徳島": "四国地方", "香川": "四国地方", "愛媛": "四国地方", "高知": "四国地方",
+    "福岡": "九州北部地方", "佐賀": "九州北部地方", "長崎": "九州北部地方", "熊本": "九州北部地方", "大分": "九州北部地方",
+    "宮崎": "九州南部地方", "鹿児島": "九州南部地方",
+    "沖縄": "沖縄地方"
+  };
+  const region = regionMap[userPref.replace(/[都道府県]/g, "")] || "";
+
+  // --- ③ 気象警報取得 ---
   try {
-    const geoRes = await fetch(`/api/reverse-geocode?lat=${lat}&lon=${lon}`);
-    const geoData = await geoRes.json();
-    const prefecture = geoData.prefecture;
+    const urlJMA = "https://www.jma.go.jp/bosai/hazard/data/warning/00.json";
+    const proxyUrl = `/api/proxy?url=${encodeURIComponent(urlJMA)}`;
+    const res = await fetch(proxyUrl);
+    if (!res.ok) throw new Error(`JMA API error: ${res.status}`);
+    const jsonData = await res.json();
 
-    if (!prefecture) {
-      console.warn("[fetchDisasterAlerts] 都道府県名が取得できませんでした");
-      return;
-    }
+    const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
+    areas.forEach((area) => {
+      if (!area.warnings) return;
 
-    console.log("[fetchDisasterAlerts] 都道府県名:", prefecture);
-    console.log("fetching disaster alerts with:", lat, lon);
+      const areaName = area.name;
+      const matchByPref = areaName.includes(userPref);
+      const matchByRegion = region && areaName.includes(region);
+      if (!matchByPref && !matchByRegion) return;
 
-    // --- 気象警報 ---
-    const alertRes = await fetch(`/api/disaster-alerts?lat=${lat}&lon=${lon}`);
-    console.log("alertRes.ok:", alertRes.ok);
-    console.log("Content-Type:", alertRes.headers.get("content-type"));
-    if (!alertRes.ok) throw new Error(`HTTP error! status: ${alertRes.status}`);
-    const alertData = await alertRes.json();
-    console.log("alertData:", alertData);
+      area.warnings
+        .filter(w => w.status !== "解除")
+        .forEach(w => {
+          const level = w.kind.name.includes("特別") ? "特別警報" :
+                        w.kind.name.includes("警報") ? "警報" : "注意報";
 
-    const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
-    const relevantAlerts = alerts.filter(alert =>
-      Array.isArray(alert.areas) &&
-      alert.areas.some(area => area?.name?.includes(prefecture))
-    );
+          alerts.push({
+            area: area.name,
+            warning_type: w.kind.name,
+            description: w.kind.name,
+            issued_at: w.issued,
+            level: level,
+            polygon: area.polygon || null
+          });
+        });
+    });
 
-    if (relevantAlerts.length > 0) {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」の警報`, relevantAlerts);
+    if (alerts.length > 0) {
+      console.log(`[気象警報] ${alerts.length} 件の警報を検出`);
       alert(
-        `【気象警報】${prefecture}\n` +
-        relevantAlerts.map(a =>
-          `・${a.kind}：${a.infos?.map(info => info.status).join("、")}`
-        ).join("\n")
+        `【気象警報】${userPref}
+` +
+        alerts.map(a => `・${a.warning_type}（${a.level}） in ${a.area}`).join("\n")
       );
     } else {
-      console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
+      console.log(`[気象警報] ${userPref} に警報はありません`);
     }
 
-    // --- 地震速報 ---
+    localStorage.setItem("alerts", JSON.stringify(alerts));
+    updateAlertSection(alerts, false);
+    updateMapAlerts(alerts);
+
+  } catch (e) {
+    console.error("[気象警報エラー]", e);
+    hadError = true;
+    updateAlertSection([], true);
+    updateMapAlerts([]);
+  }
+
+  // --- ④ 地震速報 ---
+  try {
     const quakeRes = await fetch("/api/quake-alerts");
     if (quakeRes.ok) {
       const quakeData = await quakeRes.json();
@@ -964,28 +933,28 @@ async function fetchDisasterAlerts(lat, lon) {
         alert(`【地震速報】\n震源地: ${quake.place}\n最大震度: ${scale}`);
       }
     }
+  } catch (e) {
+    console.error("[地震速報エラー]", e);
+  }
 
-    // --- 津波警報 ---
+  // --- ⑤ 津波警報 ---
+  try {
     const tsunamiRes = await fetch(`/api/tsunami-alerts?lat=${lat}&lon=${lon}`);
     if (tsunamiRes.ok) {
       const tsunamiData = await tsunamiRes.json();
       const tsunamiAlerts = tsunamiData.tsunami_alerts || [];
-
-      console.log("[津波警報]", tsunamiAlerts);
-
       if (tsunamiAlerts.length > 0) {
         const message = tsunamiAlerts.map(a =>
           `・${a.name}：${a.category}（${a.grade}）`
         ).join("\n");
-
-        alert(`【津波警報】${prefecture}\n${message}`);
+        alert(`【津波警報】${userPref}\n${message}`);
       }
     }
-
-  } catch (err) {
-    console.error("[fetchDisasterAlerts エラー]", err);
+  } catch (e) {
+    console.error("[津波警報エラー]", e);
   }
 }
+
 
 
     // 位置情報ボタン
