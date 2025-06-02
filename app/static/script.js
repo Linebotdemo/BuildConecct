@@ -978,16 +978,29 @@ console.log("Relevant alerts:", relevantAlerts);
       console.log(`[fetchDisasterAlerts] 該当地域「${prefecture}」に気象警報はありません`);
     }
 
-    // --- 地震速報 ---
-    const quakeRes = await fetch("/api/quake-alerts");
-    if (quakeRes.ok) {
-      const quakeData = await quakeRes.json();
-      const quake = quakeData.quakes?.[0];
-      if (quake) {
-        const scale = quake.maxScale / 10;
-        alert(`【地震速報】\n震源地: ${quake.place}\n最大震度: ${scale}`);
-      }
+// --- 地震速報 ---
+try {
+  const quakeRes = await fetch("/api/quake-alerts");
+  if (quakeRes.ok) {
+    const quakeData = await quakeRes.json();
+    console.log("quakeData:", quakeData);
+    console.log("quakeData.quakes:", quakeData.quakes);
+
+    const quake = quakeData.quakes?.[0];
+    if (quake) {
+      const scale = quake.maxScale / 10;
+      console.log("[地震速報]", quake);
+      alert(`【地震速報】\n震源地: ${quake.place}\n最大震度: ${scale}`);
+    } else {
+      console.log("[地震速報] 該当する地震なし");
     }
+  } else {
+    console.warn("[地震速報] API呼び出し失敗");
+  }
+} catch (e) {
+  console.error("[地震速報] エラー:", e.message);
+}
+
 
     // --- 津波警報 ---
     const tsunamiRes = await fetch(`/api/tsunami-alerts?lat=${lat}&lon=${lon}`);
