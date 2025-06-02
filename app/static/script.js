@@ -992,47 +992,53 @@ async function fetchDisasterAlerts(lat, lon) {
 
 
     // 位置情報ボタン
-    const geoButton = document.createElement("button");
-    geoButton.textContent = "現在地を取得";
-    geoButton.className = "btn btn-primary mb-3";
-    geoButton.onclick = () => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            userLocation = [position.coords.latitude, position.coords.longitude];
-            L.marker(userLocation, {
-              icon: L.divIcon({ className: "user-icon", html: "📍" }),
-            })
-              .addTo(map)
-              .bindPopup("現在地")
-              .openPopup();
-            map.setView(userLocation, 12);
-            console.log("[initMap] User location:", userLocation);
-            fetchShelters();
-            fetchAlerts();
-            fetchDisasterAlerts(userLocation[0], userLocation[1]);
-          },
-          (error) => {
-            console.warn("[initMap] Geolocation error:", error.message);
-            userLocation = [35.6762, 139.6503]; // Fallback
-            fetchShelters();
-            fetchAlerts();
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
-          }
-        );
-      } else {
-        console.warn("[initMap] Geolocation not supported");
-        userLocation = [35.6762, 139.6503];
+geoButton.onclick = () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+
+        window.userLat = lat;
+        window.userLon = lon;
+        userLocation = [lat, lon];
+
+        console.log("[initMap] User location:", lat, lon);
+
+        // マップ表示
+        L.marker(userLocation, {
+          icon: L.divIcon({ className: "user-icon", html: "📍" }),
+        })
+          .addTo(map)
+          .bindPopup("現在地")
+          .openPopup();
+        map.setView(userLocation, 12);
+
+        // 各種情報取得
+        await fetchShelters();
+        await fetchAlerts(); // ←この中で userLat, userLon を使うようにする
+        await fetchDisasterAlerts(lat, lon);
+      },
+      (error) => {
+        console.warn("[initMap] Geolocation error:", error.message);
+        userLocation = [35.6762, 139.6503]; // Fallback: 東京
         fetchShelters();
         fetchAlerts();
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
       }
-    };
-    document.querySelector(".container").prepend(geoButton);
-    geoButton.click();
+    );
+  } else {
+    console.warn("[initMap] Geolocation not supported");
+    userLocation = [35.6762, 139.6503];
+    fetchShelters();
+    fetchAlerts();
+  }
+};
+
 
 
 
