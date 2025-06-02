@@ -954,10 +954,15 @@ async function fetchDisasterAlerts(lat, lon) {
 const alerts = Array.isArray(alertData?.alerts) ? alertData.alerts : [];
 
 const relevantAlerts = alerts.filter(alert => {
-  console.log("Checking alert areas:", alert.areas);  // ← ここ！
+  console.log("Checking alert areas:", alert.areas);  // ← すでにここにあるやつ
   return Array.isArray(alert.areas) &&
     alert.areas.some(area => typeof area?.name === "string" && area.name.includes(prefecture));
 });
+
+// 🔽 ここに追記
+console.log("Prefecture:", prefecture);
+console.log("Relevant alerts:", relevantAlerts);
+
 
 
 
