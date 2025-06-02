@@ -1256,8 +1256,12 @@ async def get_prefecture_code(lat: float, lon: float) -> str:
 
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
-    prefecture_name = await get_prefecture_code(lat, lon)
-    prefecture_code = PREF_CODE_MAP.get(prefecture_name)
+    prefecture_name = await get_prefecture_code(lat, lon)  # 例: "茨城"
+
+    # 「茨城県」などに補完してコードを探す
+    suffixes = ["県", "府", "都", "道"]
+    possible_keys = [prefecture_name + s for s in suffixes]
+    prefecture_code = next((PREF_CODE_MAP.get(k) for k in possible_keys if PREF_CODE_MAP.get(k)), None)
 
     if not prefecture_code:
         raise HTTPException(status_code=400, detail=f"{prefecture_name} のJMAコードが見つかりません")
@@ -1274,7 +1278,7 @@ async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
         for area_type in jma_data.get("areaTypes", []):
             for area in area_type.get("areas", []):
                 area_name = area.get("name", "")
-                if prefecture_name.replace("県", "").replace("府", "").replace("都", "") not in area_name:
+                if prefecture_name not in area_name:
                     continue
                 for warn in area.get("warnings", []):
                     if warn.get("status") == "解除":
@@ -1290,6 +1294,7 @@ async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
+
 
 
 
