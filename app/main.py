@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi import APIRouter, Query
 import traceback
 from datetime import datetime, timedelta
+from fastapi import Body
 import schemas
 from fastapi import (
     FastAPI,
@@ -773,7 +774,7 @@ async def delete_shelter(
         raise HTTPException(status_code=500, detail=f"避難所削除に失敗しました: {str(e)}")
 
 # 一括更新（認証必要）
-@app.post("/api/shelters/bulk-update")
+@app.patch("/api/shelters/bulk-update")
 async def bulk_update_shelters(
     request: BulkUpdateRequest,
     db: Session = Depends(get_db),
