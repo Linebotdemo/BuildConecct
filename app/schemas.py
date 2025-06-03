@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional, Dict
+from pydantic import EmailStr
 
 class ShelterAttributes(BaseModel):
     pets_allowed: Optional[bool] = False
