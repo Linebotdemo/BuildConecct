@@ -2,6 +2,7 @@ import os
 import secrets
 from datetime import datetime
 from typing import List
+from schemas import CompanySchema
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
