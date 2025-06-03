@@ -25,6 +25,7 @@ class CompanyCreateSchema(BaseModel):
     name: str
     email: EmailStr
     password: str
+    role: str = "company"
 
 # 🔽 レスポンス用
 class CompanyOut(BaseModel):
@@ -45,7 +46,7 @@ def list_companies(db: Session = Depends(get_db)):
 @router.post("/", response_model=CompanyOut)
 def create_company(company: CompanyCreateSchema, db: Session = Depends(get_db)):
     try:
-        print(f"Received company data: {company.dict()}")
+        print(f"Received company data: {company.dict(exclude_unset=False)}")
         existing_company = db.query(CompanyModel).filter(
             (CompanyModel.email == company.email) | (CompanyModel.name == company.name)
         ).first()
