@@ -12,6 +12,8 @@ import traceback
 from datetime import datetime, timedelta
 from fastapi import Body
 import schemas
+from fastapi import Request
+from jose import jwt, JWTError
 from fastapi import (
     FastAPI,
     Depends,
@@ -446,12 +448,34 @@ async def register_auth(request: Request, auth_password: str = Form(...)):
     )
 
 @app.post("/shelters", response_model=schemas.ShelterSchema)
-def create_shelter(shelter: schemas.ShelterCreate, db: Session = Depends(get_db)):
-    new_shelter = models.ShelterModel(**shelter.dict())
-    db.add(new_shelter)
-    db.commit()
-    db.refresh(new_shelter)
-    return new_shelter
+def create_shelter(
+    request: Request,
+    shelter: schemas.ShelterCreate,
+    db: Session = Depends(get_db)
+):
+    try:
+        token = request.cookies.get("token")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+
+        if email is None:
+            raise HTTPException(status_code=401, detail="トークンが無効です")
+
+        company = db.query(CompanyModel).filter(CompanyModel.email == email).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="企業情報が見つかりません")
+
+        new_shelter = models.ShelterModel(
+            **shelter.dict(exclude={"company_id"}),
+            company_id=company.id  # ← ここで強制的にログイン中のIDに上書き
+        )
+        db.add(new_shelter)
+        db.commit()
+        db.refresh(new_shelter)
+        return new_shelter
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="不正なトークン")
 
 # 避難所一覧取得（公開エンドポイント）
 @app.get("/api/shelters", response_model=List[ShelterSchema])
