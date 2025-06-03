@@ -2,7 +2,7 @@ import os
 import secrets
 from datetime import datetime
 from typing import List
-from schemas import CompanySchema
+from schemas import CompanyCreateSchema
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
@@ -43,7 +43,7 @@ def list_companies(db: Session = Depends(get_db)):
     return db.query(CompanyModel).order_by(CompanyModel.created_at.desc()).all()
 
 @router.post("/", response_model=CompanyOut)
-def create_company(company: CompanySchema, db: Session = Depends(get_db)):
+def create_company(company: CompanyCreateSchema, db: Session = Depends(get_db)):
     try:
         print(f"Received company data: {company.dict()}")
         existing_company = db.query(CompanyModel).filter(
@@ -51,18 +51,17 @@ def create_company(company: CompanySchema, db: Session = Depends(get_db)):
         ).first()
         if existing_company:
             raise HTTPException(
-                status_code=400,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="自治体名またはメールアドレスが既に登録されています"
             )
 
-        # パスワードをハッシュ化
-        hashed_pw = hash_password(company.hashed_pw)
-
+        hashed_pw = hash_password(company.password)
         db_company = CompanyModel(
             name=company.name,
             email=company.email,
-            hashed_pw=hashed_pw,  # 🔧 モデルに合わせてここを修正
-            role=company.role
+            hashed_pw=hashed_pw,
+            role="company",  # デフォルトで company ロール
+            created_at=datetime.utcnow()
         )
         db.add(db_company)
         db.commit()
@@ -71,7 +70,7 @@ def create_company(company: CompanySchema, db: Session = Depends(get_db)):
         return db_company
     except IntegrityError:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="自治体名またはメールアドレスが既に登録されています"
         )
     except Exception as e:
