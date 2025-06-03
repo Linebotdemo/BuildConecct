@@ -808,7 +808,7 @@ async def bulk_update_shelters(
 # ✅ 一括削除（認証必要） DELETE対応 + Body受け取り
 @app.delete("/api/shelters/bulk-delete")
 async def bulk_delete_shelters(
-    shelter_ids: List[int] = Body(...),
+    shelter_ids: List[int] = Body(..., embed=True),  # ← embed=True を追加！
     db: Session = Depends(get_db),
     current_user: CompanyModel = Depends(get_current_user),
 ):

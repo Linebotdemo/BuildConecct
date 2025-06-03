@@ -497,31 +497,35 @@ const payload = {
     }
 
     // 一括削除
-    async function bulkDelete() {
-      const selected = Array.from(document.querySelectorAll('.shelter-checkbox:checked'))
-        .map(cb => cb.dataset.id);
-      if (!selected.length) {
-        alert('避難所を選択してください');
-        return;
-      }
-      if (!confirm('選択した避難所を削除しますか？')) return;
-      try {
-        const res = await fetch(`${apiUrl}/shelters/bulk-delete`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ ids: selected })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        fetchShelters();
-        alert('一括削除が完了しました');
-      } catch (error) {
-        console.error('Bulk delete error:', error);
-        alert('一括削除に失敗しました');
-      }
-    }
+async function bulkDelete() {
+  const selected = Array.from(document.querySelectorAll('.shelter-checkbox:checked'))
+    .map(cb => parseInt(cb.dataset.id));  // IDを数値に変換するのも安全
+
+  if (!selected.length) {
+    alert('避難所を選択してください');
+    return;
+  }
+  if (!confirm('選択した避難所を削除しますか？')) return;
+
+  try {
+    const res = await fetch(`${apiUrl}/shelters/bulk-delete`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ shelter_ids: selected })  // ← 🔥 ここが修正点！
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    fetchShelters();
+    alert('一括削除が完了しました');
+  } catch (error) {
+    console.error('Bulk delete error:', error);
+    alert('一括削除に失敗しました');
+  }
+}
+
 
     // 初期化
 document.addEventListener('DOMContentLoaded', () => {
