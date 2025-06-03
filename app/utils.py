@@ -3,24 +3,29 @@ import secrets
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session  # 同期セッション用
+from sqlalchemy.orm import Session
 
-# schemas から CompanySchema をインポート
-from schemas import CompanySchema
-
-print("→ LOADING utils.py (no create_all)")
 from database import get_db
 from models import Company as CompanyModel
+
+print("→ LOADING utils.py (no create_all)")
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain: str) -> str:
     return pwd_ctx.hash(plain)
 
+# 🔽 クライアントからのリクエスト用（password付き）
+class CompanyCreateSchema(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+# 🔽 レスポンス用
 class CompanyOut(BaseModel):
     id: int
     name: str
@@ -37,7 +42,7 @@ def list_companies(db: Session = Depends(get_db)):
     return db.query(CompanyModel).order_by(CompanyModel.created_at.desc()).all()
 
 @router.post("/", response_model=CompanyOut)
-def create_company(company: CompanySchema, db: Session = Depends(get_db)):
+def create_company(company: CompanyCreateSchema, db: Session = Depends(get_db)):
     try:
         print(f"Received company data: {company.dict()}")
         existing_company = db.query(CompanyModel).filter(
@@ -51,7 +56,8 @@ def create_company(company: CompanySchema, db: Session = Depends(get_db)):
         db_company = CompanyModel(
             name=company.name,
             email=company.email,
-            role=company.role
+            hashed_password=hash_password(company.password),
+            role="company",
         )
         db.add(db_company)
         db.commit()

@@ -71,9 +71,9 @@ class CompanySchema(BaseModel):
     hashed_pw: str = Field(..., alias="hashed_password")
     role: str
     created_at: datetime
-
     class Config:
         from_attributes = True
+
 
 class Shelter(BaseModel):
     id: Optional[int] = None
@@ -94,6 +94,11 @@ class Shelter(BaseModel):
 
     class Config:
         from_attributes = True
+
+class CompanyCreateSchema(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
 
 
 
