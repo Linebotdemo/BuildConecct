@@ -509,7 +509,7 @@ async function bulkDelete() {
 
   try {
     const res = await fetch(`${apiUrl}/shelters/bulk-delete`, {
-      method: 'DELETE',
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
