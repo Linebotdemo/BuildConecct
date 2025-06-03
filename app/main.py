@@ -1062,66 +1062,40 @@ async def get_audit_logs(db: Session = Depends(get_db), current_user: CompanyMod
 # ジオコーディング
 @app.get("/api/geocode")
 async def geocode_address_endpoint(address: str):
-    if not YAHOO_APPID:
-        logger.error("Yahoo APPID is not set")
-        raise HTTPException(status_code=500, detail="Yahoo APIのAPPIDが設定されていません")
-
     try:
-        logger.info(f"📍 Geocoding address: {address}")
-        url = "https://map.yahooapis.jp/geocode/V1/geoCoder"
+        logger.info(f"📍 [OSM] Geocoding address: {address}")
+        url = "https://nominatim.openstreetmap.org/search"
         params = {
-            "appid": YAHOO_APPID,
-            "query": address,
-            "output": "json",
+            "q": address,
+            "format": "json",
+            "limit": 1,
         }
-
         headers = {
-            "User-Agent": "SmartShelterApp/1.0 (k.inose0902@gmail.com)",  # Yahooが好む形式
-            "Accept": "application/json",
+            "User-Agent": "SmartShelterApp/1.0 (k.inose0902@gmail.com)"  # 必須
         }
-
-        logger.debug(f"🌐 Request URL: {url}")
-        logger.debug(f"📦 Params: {params}")
-        logger.debug(f"🧠 Headers: {headers}")
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, params=params, headers=headers)
 
-        logger.info("🔁 Yahoo Geocode response status: %d", resp.status_code)
+        logger.info("🔁 OSM Geocode response status: %d", resp.status_code)
         logger.debug("📨 Raw response text: %s", resp.text)
 
         if resp.status_code != 200:
-            logger.error("🚫 Yahoo API error: HTTP %d", resp.status_code)
-            raise HTTPException(status_code=502, detail=f"Yahoo API エラー: HTTP {resp.status_code}")
+            raise HTTPException(status_code=502, detail=f"OSM API エラー: HTTP {resp.status_code}")
 
-        try:
-            data = resp.json()
-        except Exception as json_err:
-            logger.exception("❌ JSON parse error from Yahoo API response")
-            raise HTTPException(status_code=500, detail="Yahoo APIのレスポンスの解析に失敗しました")
+        data = resp.json()
+        if not data:
+            raise HTTPException(status_code=404, detail="ジオコーディング失敗: 該当住所が見つかりません")
 
-        if not data.get("Feature"):
-            msg = data.get("Error", [{"Message": "住所が見つかりません"}])[0]["Message"]
-            logger.warning("⚠️ Geocode failed: %s", msg)
-            raise HTTPException(status_code=404, detail=f"ジオコーディング失敗: {msg}")
-
-        feature = data["Feature"][0]
-        coordinates = feature.get("Geometry", {}).get("Coordinates")
-        if not coordinates:
-            logger.error("❌ Coordinates not found in response")
-            raise HTTPException(status_code=400, detail="無効なジオコードレスポンス形式")
-
-        lon, lat = map(float, coordinates.split(","))
-        logger.info("✅ Geocoded success: lat=%f, lon=%f", lat, lon)
+        lat = float(data[0]["lat"])
+        lon = float(data[0]["lon"])
+        logger.info("✅ OSM Geocoded: lat=%f, lon=%f", lat, lon)
         return {"lat": lat, "lon": lon}
 
-    except httpx.RequestError as re:
-        logger.exception("❌ HTTP Request Error during Yahoo Geocode")
-        raise HTTPException(status_code=500, detail=f"Yahoo APIへのリクエストに失敗しました: {str(re)}")
-
     except Exception as e:
-        logger.exception("❌ Unhandled exception in geocode")
+        logger.exception("❌ OSM Geocode error")
         raise HTTPException(status_code=500, detail=f"ジオコーディングに失敗しました: {str(e)}")
+
 
 
 # プロキシエンドポイント（JMA API）
