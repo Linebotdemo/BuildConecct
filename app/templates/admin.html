@@ -462,39 +462,46 @@ const payload = {
     }
 });
     // 一括更新
-    async function bulkUpdate() {
-      const status = document.getElementById('bulk-status').value;
-      const occupancy = document.getElementById('bulk-occupancy').value;
-      if (!status && !occupancy) {
-        alert('状態または利用人数を選択してください');
-        return;
-      }
-      const selected = Array.from(document.querySelectorAll('.shelter-checkbox:checked'))
-        .map(cb => cb.dataset.id);
-      if (!selected.length) {
-        alert('避難所を選択してください');
-        return;
-      }
-      const payload = {};
-      if (status) payload.status = status;
-      if (occupancy) payload.current_occupancy = Number(occupancy);
-      try {
-        const res = await fetch(`${apiUrl}/shelters/bulk-update`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ ids: selected, updates: payload })
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        fetchShelters();
-        alert('一括更新が完了しました');
-      } catch (error) {
-        console.error('Bulk update error:', error);
-        alert('一括更新に失敗しました');
-      }
-    }
+async function bulkUpdate() {
+  const status = document.getElementById('bulk-status').value;
+  const occupancy = document.getElementById('bulk-occupancy').value;
+  if (!status && !occupancy) {
+    alert('状態または利用人数を選択してください');
+    return;
+  }
+  const selected = Array.from(document.querySelectorAll('.shelter-checkbox:checked'))
+    .map(cb => parseInt(cb.dataset.id));
+
+  if (!selected.length) {
+    alert('避難所を選択してください');
+    return;
+  }
+
+  const payload = {
+    shelter_ids: selected,
+    status: status || null,
+    current_occupancy: occupancy ? parseInt(occupancy) : null
+  };
+
+  try {
+    const res = await fetch(`${apiUrl}/shelters/bulk-update`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    fetchShelters();
+    alert('一括更新が完了しました');
+  } catch (error) {
+    console.error('Bulk update error:', error);
+    alert('一括更新に失敗しました');
+  }
+}
+
 
     // 一括削除
 async function bulkDelete() {
