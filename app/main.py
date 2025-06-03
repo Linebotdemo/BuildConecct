@@ -363,7 +363,7 @@ async def login_post(
                 shelters = db.query(ShelterModel).all()
                 logs = db.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc()).limit(50).all()
             else:
-                shelters = db.query(ShelterModel).filter(ShelterModel.operator == company.name).all()
+                shelters = db.query(ShelterModel).filter(ShelterModel.company_id == company.id).all()
         except Exception as e:
             logger.error("Error fetching shelters/logs: %s\n%s", str(e), traceback.format_exc())
 
