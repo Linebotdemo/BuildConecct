@@ -1076,7 +1076,7 @@ async def geocode_address_endpoint(address: str):
         }
 
         headers = {
-            "User-Agent": "SmartShelterApp/1.0 (support@example.com)",  # Yahooが好む形式
+            "User-Agent": "SmartShelterApp/1.0 (k.inose0902@gmail.com)",  # Yahooが好む形式
             "Accept": "application/json",
         }
 
