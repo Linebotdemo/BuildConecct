@@ -32,11 +32,13 @@
       const errorDiv = document.getElementById("error-message");
       errorDiv.textContent = "";
       const fd = new FormData(e.target);
-      const payload = {
-        name: fd.get("name").trim(),
-        email: fd.get("email").trim(),
-        password: fd.get("password").trim()
-      };
+    const payload = {
+      name: fd.get("name").trim(),
+      email: fd.get("email").trim(),
+      password: fd.get("password").trim(),
+      role: "admin"  // ← ここを追加
+    };
+
       console.log('Sending payload:', payload);
       if (!payload.name || !payload.email || !payload.password) {
         errorDiv.textContent = "すべてのフィールドを入力してください";
