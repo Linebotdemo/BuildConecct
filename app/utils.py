@@ -60,7 +60,7 @@ def create_company(company: CompanyCreateSchema, db: Session = Depends(get_db)):
             name=company.name,
             email=company.email,
             hashed_pw=hashed_pw,
-            role="company",  # デフォルトで company ロール
+            role=company.role,
             created_at=datetime.utcnow()
         )
         db.add(db_company)

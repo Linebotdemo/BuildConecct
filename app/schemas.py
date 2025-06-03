@@ -100,7 +100,7 @@ class CompanyCreateSchema(BaseModel):
     name: str
     email: EmailStr
     password: str
-
+    role: Optional[str] = "company"
 
 
 class PhotoUploadResponse(BaseModel):
