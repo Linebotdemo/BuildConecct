@@ -1,6 +1,12 @@
 const YAHOO_APPID = "dj00aiZpPWoyQVc5RXVkQWhXQyZzPWNvbnN1bWVyc2VjcmV0Jng9YTE-";
 
-let map, userLocation, markers = [], alertPolygons = [], adminMap, adminMarkers = [];
+let map = null;
+let adminMap = null;
+let userLocation = null;
+let markers = [];
+let adminMarkers = [];
+let alertPolygons = [];
+
 
 /**
  * Yahoo ジオコーディング API で住所を緯度経度に変換
@@ -1040,8 +1046,6 @@ try {
 
 
 
-let map, adminMap;
-let userLocation = null;
 
 function initMap() {
   map = L.map("map").setView([35.6812, 139.7671], 12);
