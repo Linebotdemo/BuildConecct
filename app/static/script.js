@@ -1040,9 +1040,27 @@ try {
 
 
 
+let map, adminMap;
+let userLocation = null;
 
+function initMap() {
+  map = L.map("map").setView([35.6812, 139.7671], 12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '© OpenStreetMap contributors',
+  }).addTo(map);
 
+  // 表示サイズの補正
+  setTimeout(() => map.invalidateSize(), 200);
+}
 
+function initAdminMap() {
+  adminMap = L.map("admin-map").setView([35.6812, 139.7671], 12);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '© OpenStreetMap contributors',
+  }).addTo(adminMap);
+
+  setTimeout(() => adminMap.invalidateSize(), 200);
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   initMap();
@@ -1068,7 +1086,6 @@ document.addEventListener("DOMContentLoaded", () => {
     filterForm.addEventListener("change", fetchShelters);
   }
 
-  // フィルター
   ["filter-status", "filter-distance"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) {
@@ -1080,13 +1097,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 属性チェックボックス
   [
-    "pets_allowed",
-    "barrier_free",
-    "toilet_available",
-    "food_available",
-    "medical_available",
-    "wifi_available",
-    "charging_available",
+    "pets_allowed", "barrier_free", "toilet_available",
+    "food_available", "medical_available",
+    "wifi_available", "charging_available",
   ].forEach((name) => {
     document.getElementsByName(name).forEach((cb) => {
       cb.addEventListener("change", fetchShelters);
@@ -1107,7 +1120,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // WebSocket
+  // WebSocket 設定
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
   let ws = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
   ws.onopen = () => console.log("[WebSocket] Connected");
@@ -1128,6 +1141,25 @@ document.addEventListener("DOMContentLoaded", () => {
       ws = reconnectWs;
     }, 5000);
   };
+
+  // 位置情報の取得と初期読み込み
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        userLocation = [pos.coords.latitude, pos.coords.longitude];
+        await fetchShelters();
+      },
+      async (err) => {
+        console.warn("位置情報の取得に失敗:", err.message);
+        userLocation = null;
+        await fetchShelters();
+      }
+    );
+  } else {
+    console.warn("位置情報が利用できません");
+    userLocation = null;
+    fetchShelters();
+  }
 
   // 定期更新
   setInterval(fetchAlerts, 5 * 60 * 1000);
