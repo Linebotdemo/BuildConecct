@@ -43,59 +43,63 @@
     </div>
 
     <!-- フィルタ -->
-    <div class="mb-4">
-      <h3>フィルタ</h3>
-      <form id="filter-form" class="d-flex flex-wrap align-items-center gap-3">
-        <!-- 属性チェック -->
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="pets_allowed" id="filter-pets_allowed">
-          <label class="form-check-label" for="filter-pets_allowed">ペット可</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="barrier_free" id="filter-barrier_free">
-          <label class="form-check-label" for="filter-barrier_free">バリアフリー</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="toilet_available" id="filter-toilet_available">
-          <label class="form-check-label" for="filter-toilet_available">トイレ</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="food_available" id="filter-food_available">
-          <label class="form-check-label" for="filter-food_available">食料提供</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="medical_available" id="filter-medical_available">
-          <label class="form-check-label" for="filter-medical_available">医療対応</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="wifi_available" id="filter-wifi_available">
-          <label class="form-check-label" for="filter-wifi_available">Wi-Fi</label>
-        </div>
-        <div class="form-check form-check-inline">
-          <input class="form-check-input" type="checkbox" name="charging_available" id="filter-charging_available">
-          <label class="form-check-label" for="filter-charging_available">充電設備</label>
-        </div>
+<!-- フィルタ -->
+<div class="mb-4">
+  <h3>フィルタ</h3>
+  <form id="filter-form" class="d-flex flex-wrap align-items-center gap-3">
+    <!-- 属性チェック -->
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="pets_allowed" id="filter-pets_allowed">
+      <label class="form-check-label" for="filter-pets_allowed">ペット可</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="barrier_free" id="filter-barrier_free">
+      <label class="form-check-label" for="filter-barrier_free">バリアフリー</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="toilet_available" id="filter-toilet_available">
+      <label class="form-check-label" for="filter-toilet_available">トイレ</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="food_available" id="filter-food_available">
+      <label class="form-check-label" for="filter-food_available">食料提供</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="medical_available" id="filter-medical_available">
+      <label class="form-check-label" for="filter-medical_available">医療対応</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="wifi_available" id="filter-wifi_available">
+      <label class="form-check-label" for="filter-wifi_available">Wi-Fi</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input" type="checkbox" name="charging_available" id="filter-charging_available">
+      <label class="form-check-label" for="filter-charging_available">充電設備</label>
+    </div>
 
-        <!-- 状態フィルタ -->
-        <div class="form-group d-flex align-items-center ms-3">
-          <label for="filter-status" class="me-2 mb-0">状態:</label>
-          <select id="filter-status" class="form-select form-select-sm w-auto">
-            <option value="">全て</option>
-            <option value="open" selected>開設中</option>
-            <option value="closed">閉鎖</option>
-          </select>
-        </div>
+    <!-- 状態フィルタ -->
+    <div class="form-group d-flex align-items-center ms-3">
+      <label for="filter-status" class="me-2 mb-0">状態:</label>
+      <select id="filter-status" class="form-select form-select-sm w-auto">
+        <option value="">全て</option>
+        <option value="open" selected>開設中</option>
+        <option value="closed">閉鎖</option>
+      </select>
+    </div>
 
-        <!-- 距離フィルタ -->
-        <div class="form-group d-flex align-items-center ms-3">
-          <label for="filter-distance" class="me-2 mb-0">範囲:</label>
-          <select id="filter-distance" class="form-select form-select-sm w-auto">
-            <option value="0">全て</option>
-            <option value="5" selected>5km以内</option>
-            <option value="10">10km以内</option>
-            <option value="20">20km以内</option>
-          </select>
-        </div>
+    <!-- 距離フィルタ -->
+    <div class="form-group d-flex align-items-center ms-3">
+      <label for="filter-distance" class="me-2 mb-0">範囲:</label>
+      <select id="filter-distance" class="form-select form-select-sm w-auto">
+        <option value="0">全て</option>
+        <option value="5" selected>5km以内</option>
+        <option value="10">10km以内</option>
+        <option value="20">20km以内</option>
+      </select>
+    </div>
+  </form> <!-- ✅ ← 正しい位置に閉じタグ -->
+</div>
+
 
 
     <!-- 避難所一覧 -->
