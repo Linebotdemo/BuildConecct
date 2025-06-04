@@ -783,7 +783,7 @@ function initMap() {
         navigator.geolocation.getCurrentPosition(
           async (position) => {
             userLocation = [position.coords.latitude, position.coords.longitude];
-
+            console.log("[Geolocation] 成功:", userLocation);
             L.marker(userLocation, {
               icon: L.divIcon({ className: "user-icon", html: "📍" }),
             })
@@ -799,6 +799,7 @@ function initMap() {
             await fetchDisasterAlerts(userLocation[0], userLocation[1]);
           },
           async (error) => {
+            console.warn("[Geolocation] 失敗:", error.message);
             console.warn("[initMap] Geolocation error:", error.message);
             userLocation = [35.6762, 139.6503]; // fallback
 
@@ -847,6 +848,7 @@ geoButton.click();
 
 
 async function fetchAlerts() {
+  console.log("[fetchAlerts] called");
   let hadError = false;
   let alerts = [];
 
@@ -1180,6 +1182,7 @@ document.addEventListener("DOMContentLoaded", () => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         userLocation = [pos.coords.latitude, pos.coords.longitude];
+        console.log("[Geolocation] 成功:",
         await fetchShelters();
       },
       async (err) => {
