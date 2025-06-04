@@ -76,28 +76,27 @@
           <label class="form-check-label" for="filter-charging_available">充電設備</label>
         </div>
 
-        <!-- 状態フィルタ -->
-        <div class="form-group d-flex align-items-center ms-3">
-          <label for="filter-status" class="me-2 mb-0">状態:</label>
-          <select id="filter-status" class="form-select form-select-sm w-auto">
-            <option value="">全て</option>
-            <option value="open">開設中</option>
-            <option value="closed">閉鎖</option>
-          </select>
-        </div>
+<!-- 状態フィルタ -->
+<div class="form-group d-flex align-items-center ms-3">
+  <label for="filter-status" class="me-2 mb-0">状態:</label>
+  <select id="filter-status" class="form-select form-select-sm w-auto">
+    <option value="">全て</option>
+    <option value="open" selected>開設中</option>
+    <option value="closed">閉鎖</option>
+  </select>
+</div>
 
-        <!-- 距離フィルタ -->
-        <div class="form-group d-flex align-items-center ms-3">
-          <label for="filter-distance" class="me-2 mb-0">範囲:</label>
-          <select id="filter-distance" class="form-select form-select-sm w-auto">
-            <option value="0">全て</option>
-            <option value="5">5km以内</option>
-            <option value="10">10km以内</option>
-            <option value="20">20km以内</option>
-          </select>
-        </div>
-      </form>
-    </div>
+<!-- 距離フィルタ -->
+<div class="form-group d-flex align-items-center ms-3">
+  <label for="filter-distance" class="me-2 mb-0">範囲:</label>
+  <select id="filter-distance" class="form-select form-select-sm w-auto">
+    <option value="0">全て</option>
+    <option value="5" selected>5km以内</option>
+    <option value="10">10km以内</option>
+    <option value="20">20km以内</option>
+  </select>
+</div>
+
 
     <!-- 避難所一覧 -->
     <div class="mb-4">
