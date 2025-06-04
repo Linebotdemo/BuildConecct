@@ -245,7 +245,6 @@ function updateMap(shelters) {
           状態: ${shelter.status === "open" ? "開設中" : "閉鎖"}<br>
           現在人数: ${shelter.current_occupancy || 0}/${shelter.capacity || 0}人
         `);
-      marker.on("click", () => showDetails(shelter.id));
       markers.push(marker);
     });
 
