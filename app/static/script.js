@@ -139,43 +139,39 @@ if (tags.length === 0) {
 }
       console.log("[updateShelterList] Tags for", shelter.id, tags);
 
-      return `
-        <div class="shelter card mb-3 p-3" data-id="${shelter.id}">
-          <h4>${shelter.name || "名称不明"}</h4>
-          <p>住所: ${shelter.address || "―"}</p>
-          <p>連絡先: ${shelter.contact || "―"}</p>
-          <p>運営団体: ${shelter.operator || "―"}</p>
-          <p>状態: ${shelter.status === "open" ? "開設中" : "閉鎖"}</p>
-          <p>定員: ${shelter.capacity || 0}人</p>
-          <p>現在: ${shelter.current_occupancy || 0}人 (${pct.toFixed(1)}%)</p>
-          ${distanceText ? `<p>距離: ${distanceText}</p>` : ""}
-          <div class="tags mb-2">${tags.join("")}</div>
-          <div class="occupancy-bar mb-2">
-            <div class="occupancy-fill ${isWarn ? "warning" : ""}" style="width:${pct}%;"></div>
-          </div>
-          <canvas id="chart-${shelter.id}" height="50"></canvas>
-          ${
-            shelter.photos?.length
-              ? `<div class="photo-gallery mb-2">${shelter.photos
-                  .map(
-                    (p) =>
-                      `<img src="${p}" class="photo-preview me-1 rounded" style="width:100px;cursor:pointer;" alt="サムネイル" onerror="this.src='/static/placeholder.jpg'">`
-                  )
-                  .join("")}</div>`
-              : ""
-          }
-          <button class="favorite-btn btn btn-outline-secondary me-1 ${
-            isFavorited ? "favorited" : ""
-          }" onclick="toggleFavorite(${shelter.id})">
-            ${isFavorited ? "★ お気に入り解除" : "☆ お気に入り登録"}
-          </button>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${shelter.latitude || 0},${
-            shelter.longitude || 0
-          }" target="_blank" class="btn btn-outline-success">
-            ルート案内
-          </a>
-        </div>
-      `;
+return `
+  <div class="shelter card mb-3 p-3" data-id="${shelter.id}">
+    <h4>${shelter.name || "名称不明"}</h4>
+    <p>住所: ${shelter.address || "―"}</p>
+    <p>連絡先: ${shelter.contact || "―"}</p>
+    <p>運営団体: ${shelter.operator || "―"}</p>
+    <p>状態: ${shelter.status === "open" ? "開設中" : "閉鎖"}</p>
+    <p>定員: ${shelter.capacity || 0}人</p>
+    <p>現在: ${shelter.current_occupancy || 0}人 (${pct.toFixed(1)}%)</p>
+    ${distanceText ? `<p>距離: ${distanceText}</p>` : ""}
+    <div class="tags mb-2">${tags.join("")}</div>
+    <div class="occupancy-bar mb-2">
+      <div class="occupancy-fill ${isWarn ? "warning" : ""}" style="width:${pct}%;"></div>
+    </div>
+    <canvas id="chart-${shelter.id}" height="50"></canvas>
+    ${
+      shelter.photos?.length
+        ? `<div class="photo-gallery mb-2">${shelter.photos
+            .map(
+              (p) =>
+                `<img src="${p}" class="photo-preview me-1 rounded" style="width:100px;cursor:pointer;" alt="サムネイル" onerror="this.src='/static/placeholder.jpg'">`
+            )
+            .join("")}</div>`
+        : ""
+    }
+    <a href="https://www.google.com/maps/dir/?api=1&destination=${shelter.latitude || 0},${
+      shelter.longitude || 0
+    }" target="_blank" class="btn btn-outline-success">
+      ルート案内
+    </a>
+  </div>
+`;
+
     })
     .join("");
 
