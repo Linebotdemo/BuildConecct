@@ -1110,12 +1110,38 @@ document.addEventListener("DOMContentLoaded", () => {
     initAdminMap();
   }
 
-  // ✅ 初期仮位置（東京）で表示
+  // ✅ 初期は東京で仮表示（即時フェッチ）
   userLocation = [35.6812, 139.7671];
   fetchShelters();
   fetchAlerts();
 
-  // ✅ 本当の現在地を取得するボタン（要 #get-location-btn がHTMLに必要）
+  // ✅ ページ読み込み時に現在地を一度自動取得
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        userLocation = [pos.coords.latitude, pos.coords.longitude];
+        console.log("[初回現在地取得] 成功:", userLocation);
+        await fetchShelters();
+        await fetchAlerts();
+        await fetchDisasterAlerts(userLocation[0], userLocation[1]);
+      },
+      async (err) => {
+        console.warn("[初回現在地取得] 失敗:", err.message);
+        // fallbackは東京（すでに設定済み）
+        await fetchShelters();
+        await fetchAlerts();
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  } else {
+    console.warn("[初回現在地取得] Geolocation未対応");
+  }
+
+  // ✅ 手動の「現在地取得ボタン」対応（要HTMLに #get-location-btn）
   const getLocationBtn = document.getElementById("get-location-btn");
   if (getLocationBtn) {
     getLocationBtn.addEventListener("click", () => {
@@ -1124,14 +1150,14 @@ document.addEventListener("DOMContentLoaded", () => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           userLocation = [pos.coords.latitude, pos.coords.longitude];
-          console.log("[現在地取得] 成功:", userLocation);
+          console.log("[現在地取得ボタン] 成功:", userLocation);
           await fetchShelters();
           await fetchAlerts();
           await fetchDisasterAlerts(userLocation[0], userLocation[1]);
         },
         (err) => {
           alert("現在地の取得に失敗しました");
-          console.warn("[現在地取得] 失敗:", err.message);
+          console.warn("[現在地取得ボタン] 失敗:", err.message);
         }
       );
     });
