@@ -275,17 +275,28 @@ function initAdminMap() {
       console.warn("[initAdminMap] #admin-map not found");
       return;
     }
+
+    // 高さが崩れた場合に備えて強制再指定
+    if (!adminMapContainer.style.height || adminMapContainer.offsetHeight < 100) {
+      adminMapContainer.style.height = "500px";
+      console.log("[initAdminMap] Height auto-fixed to 500px");
+    }
+
     adminMap = L.map("admin-map").setView([35.6762, 139.6503], 10);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: "© OpenStreetMap",
       maxZoom: 18,
     }).addTo(adminMap);
+
+    // サイズ補正
+    setTimeout(() => adminMap.invalidateSize(), 200);
     console.log("[initAdminMap] Tile layer added");
     fetchShelters();
   } catch (e) {
     console.error("[initAdminMap] Error:", e.message);
   }
 }
+
 
 /**
  * 管理者用ピン表示
@@ -1048,14 +1059,25 @@ try {
 
 
 function initMap() {
+  const mapContainer = document.getElementById("map");
+  if (!mapContainer) {
+    console.warn("[initMap] #map not found");
+    return;
+  }
+
+  if (!mapContainer.style.height || mapContainer.offsetHeight < 100) {
+    mapContainer.style.height = "500px";
+    console.log("[initMap] Height auto-fixed to 500px");
+  }
+
   map = L.map("map").setView([35.6812, 139.7671], 12);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: '© OpenStreetMap contributors',
   }).addTo(map);
 
-  // 表示サイズの補正
   setTimeout(() => map.invalidateSize(), 200);
 }
+
 
 function initAdminMap() {
   adminMap = L.map("admin-map").setView([35.6812, 139.7671], 12);
