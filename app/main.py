@@ -893,17 +893,21 @@ async def get_reverse_geocode(lat: float, lon: float):
 
     prop = features[0].get("properties", {})
 
-    # fallback付きで取得
-    prefecture = prop.get("state") or prop.get("region") or prop.get("county") or ""
-    city = prop.get("city") or prop.get("town") or prop.get("village") or prop.get("suburb") or ""
+    # ★都道府県をできるだけ柔軟に抽出
+    prefecture = prop.get("state") or prop.get("county") or prop.get("region") or ""
+    city = prop.get("city") or prop.get("town") or prop.get("village") or prop.get("district") or ""
 
-    # ログで確認
+    # ★東京都23区のように"city"が"千代田区"などの場合を東京都と仮定
+    if not prefecture and city.endswith("区"):
+        prefecture = "東京都"
+
     logger.info(f"[reverse-geocode] extracted -> prefecture: {prefecture}, city: {city}")
 
     if not prefecture:
         raise HTTPException(status_code=404, detail="Geoapify逆ジオコーディングに失敗しました: 都道府県が特定できませんでした")
 
     return {"prefecture": prefecture, "city": city}
+
 
 
 # 写真アップロード（単一、認証必要）
