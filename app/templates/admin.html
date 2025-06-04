@@ -50,18 +50,6 @@
         </button>
       </li>
       <li class="nav-item" role="presentation">
-        <button
-          class="nav-link"
-          id="logs-tab"
-          data-bs-toggle="tab"
-          data-bs-target="#logs"
-          type="button"
-          role="tab"
-          aria-controls="logs"
-          aria-selected="false"
-        >
-          監査ログ
-        </button>
       </li>
     </ul>
 
@@ -203,32 +191,6 @@
         </div>
       </div>
 
-      <!-- 監査ログタブ -->
-      <div class="tab-pane fade" id="logs" role="tabpanel" aria-labelledby="logs-tab">
-        <h2>監査ログ</h2>
-        <table class="table table-striped">
-          <thead>
-            <tr>
-              <th>アクション</th>
-              <th>避難所ID</th>
-              <th>ユーザー</th>
-              <th>日時</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for log in logs %}
-            <tr>
-              <td>{{ log.action }}</td>
-              <td>{{ log.shelter_id or 'N/A' }}</td>
-              <td>{{ log.user }}</td>
-              <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
 
   <!-- JSライブラリ -->
   <script
