@@ -28,6 +28,7 @@ from fastapi import (
 )
 from fastapi import HTTPException
 import xmltodict
+from fastapi import Header
 import requests
 from fastapi.responses import HTMLResponse, Response, FileResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -157,7 +158,22 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/company-token")
 # HTTP クライアント
 http_client = httpx.AsyncClient(timeout=10.0)
 
-
+async def get_current_user_optional(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> Optional[CompanyModel]:
+    if authorization:
+        try:
+            token = authorization.replace("Bearer ", "")
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            email: str = payload.get("sub")
+            if email is None:
+                return None
+            user = db.query(CompanyModel).filter(CompanyModel.email == email).first()
+            return user
+        except JWTError:
+            return None
+    return None
 
 
 
