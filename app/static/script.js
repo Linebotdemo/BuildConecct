@@ -865,6 +865,7 @@ async function fetchAlerts() {
   try {
     // ① 警報データ取得
     const res = await fetch(proxyUrl);
+    console.log("[fetchAlerts] response.ok:", res.ok);
     if (!res.ok) throw new Error(`JMA API error: ${res.status}`);
     const jsonData = await res.json();
     console.log("[fetchAlerts] JSON keys:", Object.keys(jsonData));
@@ -872,6 +873,7 @@ async function fetchAlerts() {
     // ② ユーザー都道府県・市取得
     const reverseRes = await fetch(`/api/reverse-geocode?lat=${userLocation[0]}&lon=${userLocation[1]}`);
     const reverseData = await reverseRes.json();
+    console.log("[fetchAlerts] reverse-geocode result:", reverseData);
     const userPref = reverseData.prefecture;
     const userCity = reverseData.city;
     console.log(`[fetchAlerts] User Pref: ${userPref}, City: ${userCity}`);
@@ -893,6 +895,7 @@ async function fetchAlerts() {
     };
 
     const region = regionMap[userPref.replace(/(都|道|府|県)/g, "")] || "";
+    console.log("[fetchAlerts] areas length:", areas.length);
     console.log(`[fetchAlerts] 推定地方名: ${region}`);
 
     // ④ 警報エリアを絞り込み（都道府県名または地方名に一致）
