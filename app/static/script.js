@@ -1090,7 +1090,11 @@ function initAdminMap() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initMap();
-  initAdminMap();
+
+  const adminMapContainer = document.getElementById("admin-map");
+  if (adminMapContainer) {
+    initAdminMap(); // ✅ 存在する時だけ呼ぶ
+  }
 
   // ✅ 初期フィルタ設定
   const statusSelect = document.getElementById("filter-status");
