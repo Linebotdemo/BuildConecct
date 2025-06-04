@@ -482,6 +482,8 @@ def create_shelter(
 async def get_shelters(
     db: Session = Depends(get_db),
     search: Optional[str] = Query(None),
+    current_user: Optional[CompanyModel] = Depends(get_current_user_optional),
+    only_mine: bool = Query(False),  # ← 追加
     status: Optional[str] = Query(None, pattern="^(open|closed)?$"),
     distance: Optional[float] = Query(None, ge=0),
     latitude: Optional[float] = Query(None),
@@ -498,19 +500,18 @@ async def get_shelters(
         logger.info("Fetching shelters: search=%s, status=%s, distance=%s", search, status, distance)
         query = db.query(ShelterModel)
 
-        # 検索フィルタ
+        # 自分の投稿のみ取得（オプション）
+        if only_mine and current_user:
+            query = query.filter(ShelterModel.company_id == current_user.id)
+
         if search:
             search = f"%{search}%"
             query = query.filter(
                 (ShelterModel.name.ilike(search)) |
                 (ShelterModel.address.ilike(search))
             )
-
-        # 状態フィルタ
         if status:
             query = query.filter(ShelterModel.status == status)
-
-        # 属性フィルタ
         if pets_allowed is not None:
             query = query.filter(ShelterModel.pets_allowed == pets_allowed)
         if barrier_free is not None:
@@ -532,11 +533,11 @@ async def get_shelters(
         if distance and latitude is not None and longitude is not None:
             from math import radians, sin, cos, sqrt, atan2
             def haversine(lat1, lon1, lat2, lon2):
-                R = 6371  # 地球の半径（km）
+                R = 6371
                 dlat = radians(lat2 - lat1)
                 dlon = radians(lon2 - lon1)
-                a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
-                c = 2 * atan2(sqrt(a), sqrt(1-a))
+                a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+                c = 2 * atan2(sqrt(a), sqrt(1 - a))
                 return R * c
 
             filtered_shelters = []
@@ -547,7 +548,6 @@ async def get_shelters(
                         filtered_shelters.append(shelter)
             shelters = filtered_shelters
 
-        # レスポンス生成
         result = []
         for shelter in shelters:
             photos = [f"/api/photos/{photo.id}" for photo in shelter.photos_rel]
@@ -581,9 +581,11 @@ async def get_shelters(
 
         logger.info("Returning %d shelters", len(result))
         return result
+
     except Exception as e:
         logger.error("Error in get_shelters: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"避難所取得に失敗しました: {str(e)}")
+
 
 # 避難所作成（認証必要）
 @app.post("/api/shelters", response_model=ShelterSchema)
