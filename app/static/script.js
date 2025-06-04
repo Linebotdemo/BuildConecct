@@ -897,7 +897,6 @@ async function fetchAlerts() {
     };
 
     const region = regionMap[userPref.replace(/(都|道|府|県)/g, "")] || "";
-    console.log("[fetchAlerts] areas length:", areas.length);
     console.log(`[fetchAlerts] 推定地方名: ${region}`);
 
     // ④ 警報エリアを絞り込み（都道府県名または地方名に一致）
