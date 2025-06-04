@@ -1177,7 +1177,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 5000);
   };
 
-
+  // 位置情報の取得と初期読み込み
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        userLocation = [pos.coords.latitude, pos.coords.longitude];
+        await fetchShelters();
+      },
+      async (err) => {
+        console.warn("位置情報の取得に失敗:", err.message);
+        userLocation = null;
+        await fetchShelters();
+      }
+    );
+  } else {
+    console.warn("位置情報が利用できません");
+    userLocation = null;
+    fetchShelters();
+  }
 
   // 定期更新
   setInterval(fetchAlerts, 5 * 60 * 1000);
