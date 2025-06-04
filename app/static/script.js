@@ -1044,31 +1044,29 @@ try {
 
 
 
-document.getElementById("filter-status").value = "open";
-document.getElementById("filter-distance").value = "5";
 document.addEventListener("DOMContentLoaded", () => {
   initMap();
   initAdminMap();
 
+  // ✅ 初期フィルタ設定
+  const statusSelect = document.getElementById("filter-status");
+  const distSelect = document.getElementById("filter-distance");
+  if (statusSelect) statusSelect.value = "open";
+  if (distSelect) distSelect.value = "5";
+
   // 検索バー
-const searchInput = document.getElementById("search");
-if (!searchInput) {
-  console.error("[DOMContentLoaded] #search not found");
-} else {
-  searchInput.addEventListener("input", () => {
-    clearTimeout(searchInput.debounceTimer);
-    searchInput.debounceTimer = setTimeout(fetchShelters, 300);
-  });
-}
+  const searchInput = document.getElementById("search");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchInput.debounceTimer);
+      searchInput.debounceTimer = setTimeout(fetchShelters, 300);
+    });
+  }
 
-const filterForm = document.getElementById("filter-form");
-if (filterForm) {
-  filterForm.addEventListener("change", () => {
-    fetchShelters();
-  });
-}
-
-
+  const filterForm = document.getElementById("filter-form");
+  if (filterForm) {
+    filterForm.addEventListener("change", fetchShelters);
+  }
 
   // フィルター
   ["filter-status", "filter-distance"].forEach((id) => {
@@ -1107,8 +1105,6 @@ if (filterForm) {
         }
       }
     });
-  } else {
-    console.error("[DOMContentLoaded] #shelter-list not found");
   }
 
   // WebSocket
@@ -1120,7 +1116,7 @@ if (filterForm) {
     try {
       const data = JSON.parse(e.data);
       console.log("[WebSocket] Received:", data);
-      fetchShelters(); // 最新データを取得
+      fetchShelters();
     } catch (err) {
       console.error("[WebSocket] Parse error:", err.message);
     }
@@ -1134,5 +1130,6 @@ if (filterForm) {
   };
 
   // 定期更新
-  setInterval(fetchAlerts, 5 * 60 * 1000); // 5分毎
-  setInterval(fetchShelters, 5 * 60 * 1000); // 5分毎
+  setInterval(fetchAlerts, 5 * 60 * 1000);
+  setInterval(fetchShelters, 5 * 60 * 1000);
+});
