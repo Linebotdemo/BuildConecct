@@ -878,58 +878,32 @@ async def bulk_delete_shelters(
 
 
 @app.get("/api/reverse-geocode")
-async def reverse_geocode(lat: float, lon: float):
-    url = "https://api.geoapify.com/v1/geocode/reverse"
-    params = {
-        "lat": lat,
-        "lon": lon,
-        "lang": "ja",
-        "apiKey": GEOAPIFY_API_KEY
-    }
+async def get_reverse_geocode(lat: float, lon: float):
+    url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&lang=ja&apiKey={GEOAPIFY_API_KEY}"
+    headers = {"Accept": "application/json"}
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url, params=params)
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        res = await client.get(url, headers=headers)
         res.raise_for_status()
         data = res.json()
 
-        logger.info(f"Geoapify response: {json.dumps(data, ensure_ascii=False)}")
+    features = data.get("features", [])
+    if not features:
+        raise HTTPException(status_code=404, detail="Geoapify逆ジオコーディングに失敗しました: featuresなし")
 
-        features = data.get("features", [])
-        if not features:
-            raise HTTPException(status_code=404, detail="住所が見つかりません")
+    prop = features[0].get("properties", {})
 
-        prop = features[0].get("properties", {})
+    # fallback付きで取得
+    prefecture = prop.get("state") or prop.get("region") or prop.get("county") or ""
+    city = prop.get("city") or prop.get("town") or prop.get("village") or prop.get("suburb") or ""
 
-        # ✅ 都道府県を柔軟に取得
-        prefecture = (
-            prop.get("state") or
-            prop.get("region") or
-            prop.get("county") or
-            ""
-        )
+    # ログで確認
+    logger.info(f"[reverse-geocode] extracted -> prefecture: {prefecture}, city: {city}")
 
-        city = (
-            prop.get("city") or
-            prop.get("county") or
-            prop.get("municipality") or
-            prop.get("suburb") or
-            prop.get("locality") or
-            ""
-        )
+    if not prefecture:
+        raise HTTPException(status_code=404, detail="Geoapify逆ジオコーディングに失敗しました: 都道府県が特定できませんでした")
 
-        if not prefecture:
-            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
-
-        return {
-            "prefecture": prefecture,
-            "city": city
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
-
-
+    return {"prefecture": prefecture, "city": city}
 
 
 # 写真アップロード（単一、認証必要）
