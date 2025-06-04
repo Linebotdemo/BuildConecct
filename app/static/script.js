@@ -1115,19 +1115,28 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchShelters();
   fetchAlerts();
 
-  // ✅ ページ読み込み時に現在地を一度自動取得
+  // ✅ ページ読み込み時に現在地を一度自動取得して📍ピンを立てる
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         userLocation = [pos.coords.latitude, pos.coords.longitude];
         console.log("[初回現在地取得] 成功:", userLocation);
+
+        // 📍現在地マーカー追加
+        L.marker(userLocation, {
+          icon: L.divIcon({ className: "user-icon", html: "📍" }),
+        }).addTo(map)
+          .bindPopup("現在地")
+          .openPopup();
+
+        map.setView(userLocation, 12);
+
         await fetchShelters();
         await fetchAlerts();
         await fetchDisasterAlerts(userLocation[0], userLocation[1]);
       },
       async (err) => {
         console.warn("[初回現在地取得] 失敗:", err.message);
-        // fallbackは東京（すでに設定済み）
         await fetchShelters();
         await fetchAlerts();
       },
@@ -1141,7 +1150,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.warn("[初回現在地取得] Geolocation未対応");
   }
 
-  // ✅ 手動の「現在地取得ボタン」対応（要HTMLに #get-location-btn）
+  // ✅ 「現在地取得ボタン」押下時も📍ピン設置
   const getLocationBtn = document.getElementById("get-location-btn");
   if (getLocationBtn) {
     getLocationBtn.addEventListener("click", () => {
@@ -1151,6 +1160,16 @@ document.addEventListener("DOMContentLoaded", () => {
         async (pos) => {
           userLocation = [pos.coords.latitude, pos.coords.longitude];
           console.log("[現在地取得ボタン] 成功:", userLocation);
+
+          // 📍現在地マーカー追加
+          L.marker(userLocation, {
+            icon: L.divIcon({ className: "user-icon", html: "📍" }),
+          }).addTo(map)
+            .bindPopup("現在地")
+            .openPopup();
+
+          map.setView(userLocation, 12);
+
           await fetchShelters();
           await fetchAlerts();
           await fetchDisasterAlerts(userLocation[0], userLocation[1]);
