@@ -900,20 +900,23 @@ async def reverse_geocode(lat: float, lon: float):
             raise HTTPException(status_code=404, detail="住所が見つかりません")
 
         prop = features[0].get("properties", {})
-prefecture = (
-    prop.get("state") or
-    prop.get("region") or
-    prop.get("county") or
-    ""
-)
-city = (
-    prop.get("city") or
-    prop.get("county") or
-    prop.get("municipality") or
-    prop.get("suburb") or
-    prop.get("locality") or
-    ""
-)
+
+        # ✅ 都道府県を柔軟に取得
+        prefecture = (
+            prop.get("state") or
+            prop.get("region") or
+            prop.get("county") or
+            ""
+        )
+
+        city = (
+            prop.get("city") or
+            prop.get("county") or
+            prop.get("municipality") or
+            prop.get("suburb") or
+            prop.get("locality") or
+            ""
+        )
 
         if not prefecture:
             raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
@@ -925,6 +928,7 @@ city = (
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Geoapify逆ジオコーディングに失敗しました: {str(e)}")
+
 
 
 
