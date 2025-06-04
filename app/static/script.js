@@ -876,6 +876,15 @@ async function fetchAlerts() {
     const reverseRes = await fetch(`/api/reverse-geocode?lat=${userLocation[0]}&lon=${userLocation[1]}`);
     const reverseData = await reverseRes.json();
     console.log("[fetchAlerts] reverse-geocode result:", reverseData);
+
+    // エラーチェック
+    if (!reverseData || reverseData.detail || !reverseData.prefecture) {
+      console.warn("[fetchAlerts] 都道府県が取得できませんでした:", reverseData?.detail || "prefecture is undefined");
+      updateAlertSection([], true);
+      updateMapAlerts([]);
+      return;
+    }
+
     const userPref = reverseData.prefecture;
     const userCity = reverseData.city;
     console.log(`[fetchAlerts] User Pref: ${userPref}, City: ${userCity}`);
@@ -896,38 +905,38 @@ async function fetchAlerts() {
       "沖縄": "沖縄地方"
     };
 
-    const region = regionMap[userPref.replace(/(都|道|府|県)/g, "")] || "";
+    const regionKey = userPref.replace(/(都|道|府|県)/g, "");
+    const region = regionMap[regionKey] || "";
     console.log(`[fetchAlerts] 推定地方名: ${region}`);
 
-    // ④ 警報エリアを絞り込み（都道府県名または地方名に一致）
-const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
-console.log("[fetchAlerts] 全エリア数:", areas.length);
+    // ④ 警報エリア抽出
+    const areas = (jsonData.areaTypes || []).flatMap(t => t.areas || []);
+    console.log("[fetchAlerts] 全エリア数:", areas.length);
 
-areas.forEach((area) => {
-  if (!area.warnings) return;
+    areas.forEach((area) => {
+      if (!area.warnings) return;
 
-  const areaName = area?.name || "";
-  const matchByPref = typeof areaName === "string" && typeof userPref === "string" && areaName.includes(userPref);
-  const matchByRegion = typeof areaName === "string" && typeof region === "string" && areaName.includes(region);
-  const isMatch = matchByPref || matchByRegion;
+      const areaName = area?.name || "";
+      const matchByPref = typeof areaName === "string" && areaName.includes(userPref);
+      const matchByRegion = typeof areaName === "string" && areaName.includes(region);
+      const isMatch = matchByPref || matchByRegion;
 
-  if (!isMatch) return;
+      if (!isMatch) return;
 
-  area.warnings
-    .filter(w => w.status !== "解除")
-    .forEach(w => {
-      alerts.push({
-        area: area.name,
-        warning_type: w.kind.name,
-        description: w.kind.name,
-        issued_at: w.issued,
-        level: w.kind.name.includes("特別") ? "特別警報" :
-               w.kind.name.includes("警報") ? "警報" : "注意報",
-        polygon: area.polygon || null
-      });
+      area.warnings
+        .filter(w => w.status !== "解除")
+        .forEach(w => {
+          alerts.push({
+            area: area.name,
+            warning_type: w.kind.name,
+            description: w.kind.name,
+            issued_at: w.issued,
+            level: w.kind.name.includes("特別") ? "特別警報" :
+                   w.kind.name.includes("警報") ? "警報" : "注意報",
+            polygon: area.polygon || null
+          });
+        });
     });
-});
-
 
     console.log(`[fetchAlerts] 検出された警報数: ${alerts.length}`);
     alerts.forEach((a, i) => {
@@ -946,6 +955,7 @@ areas.forEach((area) => {
   updateAlertSection(alerts, hadError);
   updateMapAlerts(hadError ? [] : alerts);
 }
+
 
 async function fetchDisasterAlerts(lat, lon) {
   try {
