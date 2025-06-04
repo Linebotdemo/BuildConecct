@@ -1098,7 +1098,34 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const adminMapContainer = document.getElementById("admin-map");
   if (adminMapContainer) {
-    initAdminMap(); // ✅ 存在する時だけ呼ぶ
+    initAdminMap();
+  }
+
+  // ✅ 初期仮位置（東京）で表示
+  userLocation = [35.6812, 139.7671];
+  fetchShelters();
+  fetchAlerts();
+
+  // ✅ 本当の現在地を取得するボタン（要 #get-location-btn がHTMLに必要）
+  const getLocationBtn = document.getElementById("get-location-btn");
+  if (getLocationBtn) {
+    getLocationBtn.addEventListener("click", () => {
+      if (!navigator.geolocation) return alert("このブラウザは位置情報に対応していません");
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          userLocation = [pos.coords.latitude, pos.coords.longitude];
+          console.log("[現在地取得] 成功:", userLocation);
+          await fetchShelters();
+          await fetchAlerts();
+          await fetchDisasterAlerts(userLocation[0], userLocation[1]);
+        },
+        (err) => {
+          alert("現在地の取得に失敗しました");
+          console.warn("[現在地取得] 失敗:", err.message);
+        }
+      );
+    });
   }
 
   // ✅ 初期フィルタ設定
@@ -1107,7 +1134,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (statusSelect) statusSelect.value = "open";
   if (distSelect) distSelect.value = "5";
 
-  // 検索バー
   const searchInput = document.getElementById("search");
   if (searchInput) {
     searchInput.addEventListener("input", () => {
@@ -1130,7 +1156,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 属性チェックボックス
   [
     "pets_allowed", "barrier_free", "toilet_available",
     "food_available", "medical_available",
@@ -1141,7 +1166,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // 画像クリックで拡大
   const shelterList = document.getElementById("shelter-list");
   if (shelterList) {
     shelterList.addEventListener("click", (ev) => {
@@ -1155,7 +1179,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // WebSocket 設定
+  // ✅ WebSocket 設定
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
   let ws = new WebSocket(`${proto}${location.host}/ws/shelters?token=${encodeURIComponent(localStorage.getItem("auth_token") || "")}`);
   ws.onopen = () => console.log("[WebSocket] Connected");
@@ -1177,26 +1201,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 5000);
   };
 
-  // 位置情報の取得と初期読み込み
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        userLocation = [pos.coords.latitude, pos.coords.longitude];
-        await fetchShelters();
-      },
-      async (err) => {
-        console.warn("位置情報の取得に失敗:", err.message);
-        userLocation = null;
-        await fetchShelters();
-      }
-    );
-  } else {
-    console.warn("位置情報が利用できません");
-    userLocation = null;
-    fetchShelters();
-  }
-
-  // 定期更新
+  // ✅ 定期更新（5分ごと）
   setInterval(fetchAlerts, 5 * 60 * 1000);
   setInterval(fetchShelters, 5 * 60 * 1000);
 });
