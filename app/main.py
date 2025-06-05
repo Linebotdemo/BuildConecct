@@ -1126,83 +1126,66 @@ async def proxy_endpoint(url: str):
         raise HTTPException(status_code=500, detail=f"プロキシリクエストに失敗しました: {str(e)}")
 
 # 災害アラート取得
-def fetch_weather_alerts():
-    cache_file = os.path.join(DATA_DIR, "alerts_cache.json")
-    try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        if os.path.exists(cache_file):
-            with open(cache_file, "r", encoding="utf-8") as f:
-                cache = json.load(f)
-                if datetime.fromisoformat(cache["timestamp"]) > datetime.utcnow() - timedelta(hours=1):
-                    logger.info("Returning cached weather alerts")
-                    return cache["alerts"]
-        mock_data = """
-        <Report>
-            <Head>
-                <Title>気象警報・注意報</Title>
-                <ReportDateTime>2025-05-30T03:00:00+09:00</ReportDateTime>
-            </Head>
-            <Body>
-                <Warning>
-                    <Item>
-                        <Kind>
-                            <Name>大雨特別警報</Name>
-                            <Code>1</Code>
-                        </Kind>
-                        <Areas>
-                            <Area>
-                                <Name>東京都</Name>
-                                <Code>13</Code>
-                            </Area>
-                        </Areas>
-                    </Item>
-                    <Item>
-                        <Kind>
-                            <Name>洪水警報</Name>
-                            <Code>2</Code>
-                        </Kind>
-                        <Areas>
-                            <Area>
-                                <Name>神奈川県</Name>
-                                <Code>14</Code>
-                            </Area>
-                        </Areas>
-                    </Item>
-                </Warning>
-            </Body>
-        </Report>
-        """
-        root = ET.fromstring(mock_data)
-        alerts = []
-        for item in root.findall(".//Warning/Item"):
-            kind = item.find("Kind/Name").text
-            area = item.find(".//Area/Name").text
-            level = "特別警報" if "特別警報" in kind else "警報" if "警報" in kind else "注意報"
-            alerts.append({
-                "area": area,
-                "warning_type": kind,
-                "description": f"{area}における{kind}",
-                "issued_at": root.find("Head/ReportDateTime").text,
-                "level": level,
-                "polygon": get_area_bounds(area),
-            })
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump({"timestamp": datetime.utcnow().isoformat(), "alerts": alerts}, f, ensure_ascii=False)
-        logger.info("Fetched and cached %d weather alerts", len(alerts))
-        return {"alerts": alerts}
-    except Exception as e:
-        logger.error("Error in fetch_weather_alerts: %s\n%s", str(e), traceback.format_exc())
-        if os.path.exists(cache_file):
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)["alerts"]
-        return []
+@app.get("/api/weather-alerts")
+async def api_weather_alerts(lat: float = Query(...), lon: float = Query(...)):
+    return await fetch_weather_alerts(lat, lon)
 
-def get_area_bounds(area: str):
-    bounds = {
-        "東京都": [[35.5, 139.4], [35.9, 139.9]],
-        "神奈川県": [[35.1, 139.0], [35.6, 139.7]],
-    }
-    return bounds.get(area, [[35.6762, 139.6503], [35.6762, 139.6503]])
+async def fetch_weather_alerts(lat: float, lon: float) -> dict:
+    try:
+        geo = await get_reverse_geocode(lat, lon)
+        prefecture_name = geo.get("prefecture", "")
+        logger.debug(f"[気象警報] Reverse geocode: {geo}")
+
+        if not prefecture_name:
+            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
+
+        suffixes = ["県", "府", "都", "道"]
+        possible_keys = [prefecture_name + s for s in suffixes]
+        prefecture_code = next((PREF_CODE_MAP.get(k) for k in possible_keys if PREF_CODE_MAP.get(k)), None)
+
+        logger.debug(f"[気象警報] 想定キー: {possible_keys}")
+        logger.debug(f"[気象警報] 適用コード: {prefecture_code}")
+
+        if not prefecture_code:
+            raise HTTPException(status_code=400, detail=f"{prefecture_name} のJMAコードが見つかりません")
+
+        jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
+        logger.info(f"[気象警報] JMA URL: {jma_url}")
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(jma_url)
+            res.raise_for_status()
+            jma_data = res.json()
+
+        logger.debug(f"[気象警報] JMAデータ: {json.dumps(jma_data)[:500]}...")  # 先頭だけ出力
+
+        alerts = []
+        for area_type in jma_data.get("areaTypes", []):
+            for area in area_type.get("areas", []):
+                area_name = area.get("name", "")
+                logger.debug(f"[気象警報] エリア名: {area_name}")
+                if prefecture_name not in area_name:
+                    continue
+                for warn in area.get("warnings", []):
+                    if warn.get("status") == "解除":
+                        continue
+                    alert = {
+                        "area": area_name,
+                        "warning_type": warn.get("kind", {}).get("name", ""),
+                        "status": warn.get("status", ""),
+                        "issued_at": warn.get("issued", ""),
+                        "description": f"{area_name}における{warn.get('kind', {}).get('name', '')}",
+                        "polygon": get_area_bounds(prefecture_name),
+                    }
+                    logger.debug(f"[気象警報] 抽出警報: {alert}")
+                    alerts.append(alert)
+
+        logger.info(f"[気象警報] 最終警報数: {len(alerts)} 件")
+        return {"alerts": alerts}
+
+    except Exception as e:
+        logger.error("[気象警報] 取得失敗: %s\n%s", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail="気象警報データの取得に失敗しました")
 
 
 PREF_CODE_MAP = {
