@@ -1482,14 +1482,11 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
                 "company_id": shelter.company_id,
             })
 
-        # ✅ 非同期で lat/lon を指定して呼ぶ
-        alerts = await fetch_weather_alerts(35.6812, 139.7671)  # 東京駅座標
 
         return templates.TemplateResponse(
             "index.html",
             {
                 "request": request,
-                "alerts": alerts,
                 "shelters": shelters_data,
                 "api_url": "/api",
                 "ws_url": "ws://localhost:8000/ws/shelters" if ENV == "local" else "wss://safeshelter.onrender.com/ws/shelters",
