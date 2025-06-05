@@ -1421,7 +1421,16 @@ async def get_reverse_geocode(lat: float, lon: float) -> dict:
         return {"prefecture": "", "city": ""}
 
     props = features[0].get("properties", {})
-    prefecture = props.get("state", "")
+    logger.debug(f"[Geoapify] reverse props: {props}")
+
+    prefecture = (
+        props.get("state") or
+        props.get("county") or
+        props.get("region") or
+        props.get("province") or
+        ""
+    )
+
     city = (
         props.get("city") or
         props.get("county") or
@@ -1432,6 +1441,7 @@ async def get_reverse_geocode(lat: float, lon: float) -> dict:
     )
 
     return {"prefecture": prefecture, "city": city}
+
 
 
 
