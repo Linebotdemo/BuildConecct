@@ -1125,67 +1125,6 @@ async def proxy_endpoint(url: str):
         logger.error("Error in proxy: %s\n%s", str(e), traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"プロキシリクエストに失敗しました: {str(e)}")
 
-# 災害アラート取得
-@app.get("/api/weather-alerts")
-async def api_weather_alerts(lat: float = Query(...), lon: float = Query(...)):
-    return await fetch_weather_alerts(lat, lon)
-
-async def fetch_weather_alerts(lat: float, lon: float) -> dict:
-    try:
-        geo = await get_reverse_geocode(lat, lon)
-        prefecture_name = geo.get("prefecture", "")
-        logger.debug(f"[気象警報] Reverse geocode: {geo}")
-
-        if not prefecture_name:
-            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
-
-        suffixes = ["県", "府", "都", "道"]
-        possible_keys = [prefecture_name + s for s in suffixes]
-        prefecture_code = next((PREF_CODE_MAP.get(k) for k in possible_keys if PREF_CODE_MAP.get(k)), None)
-
-        logger.debug(f"[気象警報] 想定キー: {possible_keys}")
-        logger.debug(f"[気象警報] 適用コード: {prefecture_code}")
-
-        if not prefecture_code:
-            raise HTTPException(status_code=400, detail=f"{prefecture_name} のJMAコードが見つかりません")
-
-        jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
-        logger.info(f"[気象警報] JMA URL: {jma_url}")
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(jma_url)
-            res.raise_for_status()
-            jma_data = res.json()
-
-        logger.debug(f"[気象警報] JMAデータ: {json.dumps(jma_data)[:500]}...")  # 先頭だけ出力
-
-        alerts = []
-        for area_type in jma_data.get("areaTypes", []):
-            for area in area_type.get("areas", []):
-                area_name = area.get("name", "")
-                logger.debug(f"[気象警報] エリア名: {area_name}")
-                if prefecture_name not in area_name:
-                    continue
-                for warn in area.get("warnings", []):
-                    if warn.get("status") == "解除":
-                        continue
-                    alert = {
-                        "area": area_name,
-                        "warning_type": warn.get("kind", {}).get("name", ""),
-                        "status": warn.get("status", ""),
-                        "issued_at": warn.get("issued", ""),
-                        "description": f"{area_name}における{warn.get('kind', {}).get('name', '')}",
-                        "polygon": get_area_bounds(prefecture_name),
-                    }
-                    logger.debug(f"[気象警報] 抽出警報: {alert}")
-                    alerts.append(alert)
-
-        logger.info(f"[気象警報] 最終警報数: {len(alerts)} 件")
-        return {"alerts": alerts}
-
-    except Exception as e:
-        logger.error("[気象警報] 取得失敗: %s\n%s", str(e), traceback.format_exc())
-        raise HTTPException(status_code=500, detail="気象警報データの取得に失敗しました")
 
 
 PREF_CODE_MAP = {
@@ -1260,6 +1199,8 @@ async def get_prefecture_code(lat: float, lon: float) -> str:
 
 
 
+
+
 @app.get("/api/disaster-alerts")
 async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
     prefecture_name = await get_prefecture_code(lat, lon)  # 例: "茨城"
@@ -1300,6 +1241,74 @@ async def get_disaster_alerts(lat: float = Query(...), lon: float = Query(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"警報データ取得に失敗しました: {str(e)}")
+
+
+# 災害アラート取得
+@app.get("/api/weather-alerts")
+async def api_weather_alerts(lat: float = Query(...), lon: float = Query(...)):
+    return await fetch_weather_alerts(lat, lon)
+
+async def fetch_weather_alerts(lat: float, lon: float) -> dict:
+    try:
+        geo = await get_reverse_geocode(lat, lon)
+        prefecture_name = geo.get("prefecture", "")
+        logger.debug(f"[気象警報] Reverse geocode: {geo}")
+
+        if not prefecture_name:
+            raise HTTPException(status_code=404, detail="都道府県が特定できませんでした")
+
+        suffixes = ["県", "府", "都", "道"]
+        possible_keys = [prefecture_name + s for s in suffixes]
+        prefecture_code = next((PREF_CODE_MAP.get(k) for k in possible_keys if PREF_CODE_MAP.get(k)), None)
+
+        logger.debug(f"[気象警報] 想定キー: {possible_keys}")
+        logger.debug(f"[気象警報] 適用コード: {prefecture_code}")
+
+        if not prefecture_code:
+            raise HTTPException(status_code=400, detail=f"{prefecture_name} のJMAコードが見つかりません")
+
+        jma_url = f"https://www.jma.go.jp/bosai/warning/data/warning/{prefecture_code}.json"
+        logger.info(f"[気象警報] JMA URL: {jma_url}")
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(jma_url)
+            res.raise_for_status()
+            jma_data = res.json()
+
+        logger.debug(f"[気象警報] JMAデータ: {json.dumps(jma_data)[:500]}...")  # 先頭だけ出力
+
+        alerts = []
+        for area_type in jma_data.get("areaTypes", []):
+            for area in area_type.get("areas", []):
+                area_name = area.get("name", "")
+                logger.debug(f"[気象警報] エリア名: {area_name}")
+                if prefecture_name not in area_name:
+                    continue
+                for warn in area.get("warnings", []):
+                    if warn.get("status") == "解除":
+                        continue
+                    alert = {
+                        "area": area_name,
+                        "warning_type": warn.get("kind", {}).get("name", ""),
+                        "status": warn.get("status", ""),
+                        "issued_at": warn.get("issued", ""),
+                        "description": f"{area_name}における{warn.get('kind', {}).get('name', '')}",
+                        "polygon": get_area_bounds(prefecture_name),
+                    }
+                    logger.debug(f"[気象警報] 抽出警報: {alert}")
+                    alerts.append(alert)
+
+        logger.info(f"[気象警報] 最終警報数: {len(alerts)} 件")
+        return {"alerts": alerts}
+
+    except Exception as e:
+        logger.error("[気象警報] 取得失敗: %s\n%s", str(e), traceback.format_exc())
+        raise HTTPException(status_code=500, detail="気象警報データの取得に失敗しました")
+
+
+
+
+
 
 
 
