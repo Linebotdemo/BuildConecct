@@ -1462,7 +1462,10 @@ async def read_root(request: Request, db: Session = Depends(get_db)):
                 "updated_at": shelter.updated_at.isoformat() if shelter.updated_at else None,
                 "company_id": shelter.company_id,
             })
-        alerts = fetch_weather_alerts()
+
+        # ✅ 非同期で lat/lon を指定して呼ぶ
+        alerts = await fetch_weather_alerts(35.6812, 139.7671)  # 東京駅座標
+
         return templates.TemplateResponse(
             "index.html",
             {
